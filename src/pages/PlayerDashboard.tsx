@@ -3,13 +3,71 @@ import { useState } from 'react';
 import StaticNoise from '../components/effects/StaticNoise';
 import FlickeringLights from '../components/effects/FlickeringLights';
 import GlitchText from '../components/effects/GlitchText';
-import Card from '../components/ui/Card';
-import Button from '../components/ui/Button';
 import PortalGauge from '../components/ui/PortalGauge';
 
 interface PlayerDashboardProps {
   onNavigate: (page: 'home' | 'login' | 'player') => void;
 }
+
+// Composant Card moderne et épuré
+const ModernCard = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.4 }}
+    style={{
+      backgroundColor: 'rgba(15, 15, 15, 0.8)',
+      backdropFilter: 'blur(10px)',
+      border: '1px solid rgba(127, 29, 29, 0.3)',
+      borderRadius: '12px',
+      padding: '1.5rem',
+      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+      position: 'relative',
+      overflow: 'hidden'
+    }}
+    className={className}
+  >
+    {children}
+  </motion.div>
+);
+
+// Bouton moderne
+const ModernButton = ({ children, onClick, variant = 'primary' }: { children: React.ReactNode; onClick?: () => void; variant?: 'primary' | 'secondary' }) => {
+  const isPrimary = variant === 'primary';
+  
+  return (
+    <motion.button
+      onClick={onClick}
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      style={{
+        width: '100%',
+        padding: '0.875rem 1.5rem',
+        backgroundColor: isPrimary ? 'rgba(127, 29, 29, 0.6)' : 'rgba(40, 40, 40, 0.6)',
+        border: isPrimary ? '1px solid rgba(220, 38, 38, 0.5)' : '1px solid rgba(75, 85, 99, 0.5)',
+        borderRadius: '8px',
+        color: '#e5e7eb',
+        fontFamily: 'monospace',
+        fontSize: '0.875rem',
+        fontWeight: '600',
+        cursor: 'pointer',
+        transition: 'all 0.3s ease',
+        backdropFilter: 'blur(5px)',
+        boxShadow: isPrimary ? '0 0 15px rgba(220, 38, 38, 0.2)' : 'none'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.backgroundColor = isPrimary ? 'rgba(127, 29, 29, 0.8)' : 'rgba(55, 55, 55, 0.8)';
+        e.currentTarget.style.borderColor = isPrimary ? 'rgba(220, 38, 38, 0.8)' : 'rgba(107, 114, 128, 0.8)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = isPrimary ? 'rgba(127, 29, 29, 0.6)' : 'rgba(40, 40, 40, 0.6)';
+        e.currentTarget.style.borderColor = isPrimary ? 'rgba(220, 38, 38, 0.5)' : 'rgba(75, 85, 99, 0.5)';
+      }}
+    >
+      {children}
+    </motion.button>
+  );
+};
 
 export default function PlayerDashboard({ onNavigate }: PlayerDashboardProps) {
   const [gameState] = useState({
@@ -18,160 +76,302 @@ export default function PlayerDashboard({ onNavigate }: PlayerDashboardProps) {
   });
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#000000', padding: '1rem', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ 
+      minHeight: '100vh', 
+      backgroundColor: '#000000', 
+      padding: '1rem', 
+      position: 'relative', 
+      overflow: 'hidden' 
+    }}>
       <StaticNoise />
       <FlickeringLights />
       
-      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, #000000, rgba(127, 29, 29, 0.1), #000000)' }} />
+      {/* Gradient radial au lieu de linéaire pour plus de profondeur */}
+      <div style={{ 
+        position: 'absolute', 
+        inset: 0, 
+        background: 'radial-gradient(ellipse at center, rgba(127, 29, 29, 0.15) 0%, #000000 70%)' 
+      }} />
       
-      <div style={{ maxWidth: '48rem', margin: '0 auto', paddingTop: '2rem', paddingBottom: '2rem', position: 'relative', zIndex: 10 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <button 
+      <div style={{ 
+        maxWidth: '1200px', 
+        margin: '0 auto', 
+        padding: '1.5rem 0', 
+        position: 'relative', 
+        zIndex: 10 
+      }}>
+        {/* Header épuré */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          marginBottom: '2rem',
+          flexWrap: 'wrap',
+          gap: '1rem'
+        }}>
+          <motion.button 
             onClick={() => onNavigate('home')}
-            style={{ color: '#dc2626', transition: 'color 0.3s', fontFamily: 'monospace' }}
-            onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-            onMouseLeave={(e) => e.currentTarget.style.color = '#dc2626'}
+            whileHover={{ x: -5 }}
+            style={{ 
+              color: '#dc2626', 
+              transition: 'all 0.3s',
+              fontFamily: 'monospace',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              fontWeight: '500'
+            }}
           >
             ← QUITTER
-          </button>
-          <GlitchText className="text-2xl font-bold" style={{ color: '#dc2626' }}>
+          </motion.button>
+          
+          <GlitchText style={{ color: '#dc2626', fontSize: '1.5rem', fontWeight: 'bold' }}>
             <h1>TERMINAL</h1>
           </GlitchText>
-          <div style={{ width: '5rem', textAlign: 'right' }}>
-            <motion.div 
-              style={{ fontSize: '0.75rem', color: '#10b981', fontFamily: 'monospace', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
-              animate={{ opacity: [1, 0.5, 1] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              <span style={{ width: '0.5rem', height: '0.5rem', backgroundColor: '#10b981', borderRadius: '9999px' }} />
-              ACTIF
-            </motion.div>
-          </div>
+          
+          {/* Indicateur de connexion minimaliste */}
+          <motion.div 
+            style={{ 
+              fontSize: '0.75rem', 
+              color: '#6b7280', 
+              fontFamily: 'monospace', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.375rem' 
+            }}
+            animate={{ opacity: [0.5, 1, 0.5] }}
+            transition={{ duration: 2, repeat: Infinity }}
+          >
+            <span style={{ 
+              width: '6px', 
+              height: '6px', 
+              backgroundColor: '#dc2626', 
+              borderRadius: '50%',
+              boxShadow: '0 0 8px rgba(220, 38, 38, 0.8)'
+            }} />
+            CONNECTÉ
+          </motion.div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <Card glow>
-            <PortalGauge level={gameState.portalLevel} maxLevel={gameState.maxLevel} />
-          </Card>
+        {/* Grid responsive avec auto-fit */}
+        <div style={{ 
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
+          gap: '1.25rem'
+        }}>
+          {/* Portail - Pleine largeur */}
+          <div style={{ gridColumn: '1 / -1' }}>
+            <ModernCard>
+              <PortalGauge level={gameState.portalLevel} maxLevel={gameState.maxLevel} />
+            </ModernCard>
+          </div>
 
-          <Card>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-              <motion.span 
-                style={{ fontSize: '2.25rem' }}
-                animate={{ rotate: [0, -10, 10, -10, 0] }}
-                transition={{ duration: 0.5, repeat: Infinity, repeatDelay: 3 }}
-              >
-                👤
-              </motion.span>
-              <div>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#10b981', fontFamily: 'monospace' }}>RÔLE : HUMAIN</h3>
-                <p style={{ fontSize: '0.875rem', color: '#9ca3af', fontFamily: 'monospace' }}>OBJECTIF : FERMER LE PORTAIL</p>
-              </div>
+          {/* Mission principale - Pleine largeur */}
+          <ModernCard style={{ gridColumn: '1 / -1' }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.75rem', 
+              marginBottom: '1.25rem',
+              paddingBottom: '1rem',
+              borderBottom: '1px solid rgba(127, 29, 29, 0.2)'
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>⚙</span>
+              <h3 style={{ 
+                fontSize: '1rem', 
+                fontWeight: '600', 
+                color: '#e5e7eb', 
+                fontFamily: 'monospace',
+                margin: 0
+              }}>
+                MISSION ACTIVE
+              </h3>
             </div>
-          </Card>
-
-          <Card>
-            <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: '#a78bfa', marginBottom: '1rem', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <motion.span
-                animate={{ rotate: 360 }}
-                transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
-              >
-                ⚙
-              </motion.span>
-              MISSION EN COURS
-            </h3>
-            <div style={{ backgroundColor: 'rgba(127, 29, 29, 0.2)', borderRadius: '0.5rem', padding: '1rem', border: '2px solid rgba(127, 29, 29, 0.3)' }}>
-              <p style={{ color: '#d1d5db', marginBottom: '1rem', fontFamily: 'monospace', fontSize: '0.875rem', lineHeight: '1.625' }}>
+            
+            <div style={{ 
+              backgroundColor: 'rgba(127, 29, 29, 0.15)', 
+              borderRadius: '8px', 
+              padding: '1.25rem',
+              border: '1px solid rgba(127, 29, 29, 0.2)',
+              marginBottom: '1rem'
+            }}>
+              <p style={{ 
+                color: '#d1d5db', 
+                fontFamily: 'monospace', 
+                fontSize: '0.875rem', 
+                lineHeight: '1.6',
+                marginBottom: '1rem'
+              }}>
                 "L'Ombre détecte quelqu'un qui a porté l'uniforme de la République avant de siéger dans les conseils..."
               </p>
-              <p style={{ fontSize: '0.875rem', color: '#9ca3af', marginBottom: '1rem', fontFamily: 'monospace' }}>🎯 CIBLE : [INCONNUE]</p>
-              <Button variant="secondary" className="w-full">
-                📷 SCANNER UN QR CODE
-              </Button>
+              <p style={{ 
+                fontSize: '0.8125rem', 
+                color: '#9ca3af', 
+                fontFamily: 'monospace',
+                margin: 0
+              }}>
+                🎯 CIBLE : <span style={{ color: '#dc2626' }}>[INCONNUE]</span>
+              </p>
             </div>
-          </Card>
+            
+            <ModernButton>
+              📷 SCANNER UN QR CODE
+            </ModernButton>
+          </ModernCard>
 
-          <Card>
-            <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: '#60a5fa', marginBottom: '1rem', fontFamily: 'monospace' }}>✓ PROGRESSION</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'monospace', fontSize: '0.875rem' }}>
-                <span style={{ color: '#d1d5db' }}>Missions complétées</span>
-                <span style={{ color: '#10b981', fontWeight: 'bold' }}>2/5</span>
+          {/* Rôle */}
+          <ModernCard>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <span style={{ fontSize: '2rem' }}>👤</span>
+              <div>
+                <h3 style={{ 
+                  fontSize: '1rem', 
+                  fontWeight: '600', 
+                  color: '#e5e7eb', 
+                  fontFamily: 'monospace',
+                  marginBottom: '0.25rem'
+                }}>
+                  HUMAIN
+                </h3>
+                <p style={{ 
+                  fontSize: '0.75rem', 
+                  color: '#6b7280', 
+                  fontFamily: 'monospace',
+                  margin: 0
+                }}>
+                  Fermer le portail
+                </p>
               </div>
-              <div style={{ width: '100%', backgroundColor: '#111827', borderRadius: '9999px', height: '0.75rem', border: '1px solid #1f2937' }}>
+            </div>
+          </ModernCard>
+
+          {/* Progression */}
+          <ModernCard>
+            <h3 style={{ 
+              fontSize: '0.875rem', 
+              fontWeight: '600', 
+              color: '#9ca3af', 
+              marginBottom: '1rem', 
+              fontFamily: 'monospace',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}>
+              Progression
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                fontFamily: 'monospace', 
+                fontSize: '0.875rem' 
+              }}>
+                <span style={{ color: '#9ca3af' }}>Missions</span>
+                <span style={{ color: '#e5e7eb', fontWeight: '600' }}>2/5</span>
+              </div>
+              <div style={{ 
+                width: '100%', 
+                backgroundColor: 'rgba(17, 24, 39, 0.8)', 
+                borderRadius: '999px', 
+                height: '8px',
+                overflow: 'hidden'
+              }}>
                 <motion.div 
-                  style={{ background: 'linear-gradient(to right, #059669, #10b981)', height: '100%', borderRadius: '9999px', position: 'relative', overflow: 'hidden' }}
+                  style={{ 
+                    background: 'linear-gradient(90deg, #7f1d1d 0%, #dc2626 100%)', 
+                    height: '100%', 
+                    borderRadius: '999px'
+                  }}
                   initial={{ width: 0 }}
                   animate={{ width: '40%' }}
                   transition={{ duration: 1, delay: 0.3 }}
-                >
-                  <motion.div
-                    style={{ position: 'absolute', inset: 0, background: 'rgba(255, 255, 255, 0.3)' }}
-                    animate={{ x: ['-100%', '200%'] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                  />
-                </motion.div>
+                />
               </div>
             </div>
-          </Card>
+          </ModernCard>
 
-          <Card>
-            <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: '#fbbf24', marginBottom: '1rem', fontFamily: 'monospace' }}>🔍 SUSPECTS</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {/* Suspects - Large sur desktop */}
+          <ModernCard style={{ gridColumn: '1 / -1' }}>
+            <h3 style={{ 
+              fontSize: '0.875rem', 
+              fontWeight: '600', 
+              color: '#9ca3af', 
+              marginBottom: '1rem', 
+              fontFamily: 'monospace',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}>
+              Suspects surveillés
+            </h3>
+            <div style={{ 
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 200px), 1fr))',
+              gap: '0.75rem',
+              marginBottom: '1rem'
+            }}>
               {['Diana', 'Eliott'].map((name, i) => (
                 <motion.div
                   key={name}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.1 }}
-                  style={{ backgroundColor: 'rgba(113, 63, 18, 0.2)', borderRadius: '0.375rem', padding: '0.75rem', border: '1px solid rgba(113, 63, 18, 0.3)', fontFamily: 'monospace', fontSize: '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                  style={{ 
+                    backgroundColor: 'rgba(127, 29, 29, 0.15)', 
+                    borderRadius: '6px', 
+                    padding: '0.875rem', 
+                    border: '1px solid rgba(127, 29, 29, 0.2)', 
+                    fontFamily: 'monospace', 
+                    fontSize: '0.8125rem',
+                    color: '#e5e7eb'
+                  }}
                 >
-                  <span style={{ color: '#d1d5db' }}>▸ {name}</span>
-                  <span style={{ color: '#fbbf24', fontSize: '0.75rem' }}>SURVEILLÉ</span>
+                  ▸ {name}
                 </motion.div>
               ))}
-              <Button variant="secondary" className="w-full mt-3">
-                ➕ AJOUTER UN SUSPECT
-              </Button>
             </div>
-          </Card>
+            <ModernButton variant="secondary">
+              ➕ AJOUTER UN SUSPECT
+            </ModernButton>
+          </ModernCard>
 
-          <Card>
-            <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: '#f87171', marginBottom: '1rem', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <motion.span
-                animate={{ scale: [1, 1.2, 1] }}
-                transition={{ duration: 1, repeat: Infinity }}
-              >
-                ⚠
-              </motion.span>
-              ÉVÉNEMENTS RÉCENTS
+          {/* Événements - Pleine largeur */}
+          <ModernCard style={{ gridColumn: '1 / -1' }}>
+            <h3 style={{ 
+              fontSize: '0.875rem', 
+              fontWeight: '600', 
+              color: '#9ca3af', 
+              marginBottom: '1rem', 
+              fontFamily: 'monospace',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}>
+              Événements récents
             </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.875rem', fontFamily: 'monospace' }}>
-              <motion.div 
-                style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-              >
-                <span style={{ color: '#10b981' }}>►</span> Matthieu a complété sa mission ✓
-              </motion.div>
-              <motion.div 
-                style={{ color: '#f87171', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-              >
-                <span style={{ color: '#ef4444' }}>►</span> Le Portail a grandi... ⚠
-              </motion.div>
-              <motion.div 
-                style={{ color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '0.5rem', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.4 }}
-              >
-                <span style={{ color: '#f59e0b' }}>►</span> Une Réunion approche... !
-              </motion.div>
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '0.625rem', 
+              fontSize: '0.8125rem', 
+              fontFamily: 'monospace' 
+            }}>
+              {[
+                'Matthieu a complété sa mission',
+                'Le Portail a augmenté son niveau',
+                'Une Réunion approche'
+              ].map((event, i) => (
+                <motion.div 
+                  key={i}
+                  style={{ color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.1 }}
+                >
+                  <span style={{ color: '#dc2626' }}>•</span> {event}
+                </motion.div>
+              ))}
             </div>
-          </Card>
+          </ModernCard>
         </div>
       </div>
     </div>
