@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #000000;
+  color: #ffffff;
+}
+
+#root {
+  min-height: 100vh;
+  background-color: #000000;
+}
+
+/* Classes pour les couleurs qui ne fonctionnent pas avec style inline */
+.text-red-600 {
+  color: #dc2626 !important;
+}
+
+.text-red-500 {
+  color: #ef4444 !important;
+}
+
+.bg-black {
+  background-color: #000000 !important;
+}
+
+/* Animation pulse */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
