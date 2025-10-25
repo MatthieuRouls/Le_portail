@@ -21,6 +21,7 @@ export async function initializeGame() {
         missionsCompleted: [],
         suspicions: [],
         isEliminated: false,
+        votedFor: null,
         createdAt: Date.now(),
       };
 

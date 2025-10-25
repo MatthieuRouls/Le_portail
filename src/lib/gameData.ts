@@ -153,10 +153,14 @@ export const MISSIONS_TIER_1 = {
 export const INITIAL_GAME_STATE = {
   id: 'game_halloween_2025',
   status: 'waiting' as const,
-  portalLevel: 10,
-  maxLevel: 20,
+  portalLevel: 0,
   startedAt: Date.now(),
   humanFragments: 0,
   alteredSuccesses: 0,
   winner: null,
+  totalMissionsCompleted: 0,
+  meetingsHeld: 0,
+  currentMeeting: null,
+  // Seuils pour déclencher les 3 réunions (basés sur le nombre de missions complétées)
+  meetingThresholds: [7, 14, 20], // 1ère réunion à 7 missions, 2ème à 14, 3ème à 20
 };

@@ -5,38 +5,62 @@
 body {
   margin: 0;
   padding: 0;
-  background-color: #000000;
-  color: #ffffff;
+  background-color: #0a0a0f;
+  color: #f0f0f5;
+  font-family: 'Inter', system-ui, sans-serif;
 }
 
 #root {
   min-height: 100vh;
-  background-color: #000000;
+  background-color: #0a0a0f;
 }
 
-/* Classes pour les couleurs qui ne fonctionnent pas avec style inline */
-.text-red-600 {
-  color: #dc2626 !important;
+/* Scrollbar personnalisée pour le thème */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-.text-red-500 {
-  color: #ef4444 !important;
+::-webkit-scrollbar-track {
+  background: #111118;
 }
 
-.bg-black {
-  background-color: #000000 !important;
+::-webkit-scrollbar-thumb {
+  background: #8b5cf6;
+  border-radius: 4px;
 }
 
-/* Animation pulse */
-@keyframes pulse {
+::-webkit-scrollbar-thumb:hover {
+  background: #a78bfa;
+}
+
+/* Animation de glow pour les éléments interactifs */
+@keyframes glow-pulse {
   0%, 100% {
-    opacity: 1;
+    box-shadow: 0 0 5px currentColor;
   }
   50% {
-    opacity: 0.5;
+    box-shadow: 0 0 20px currentColor, 0 0 30px currentColor;
   }
 }
 
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+.animate-glow {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+/* Effet de scan pour le thème sci-fi */
+@keyframes scan-line {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100vh);
+  }
+}
+
+/* Transitions fluides par défaut */
+* {
+  transition-property: color, background-color, border-color, box-shadow;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
 }

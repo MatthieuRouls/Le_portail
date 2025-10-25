@@ -15,96 +15,152 @@ export default function Home({ onNavigate }: HomeProps) {
   const [showWarning, setShowWarning] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => setShowWarning(true), 3000);
+    const timer = setTimeout(() => setShowWarning(true), 2500);
     return () => clearTimeout(timer);
   }, []);
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1rem', backgroundColor: '#000000', position: 'relative', overflow: 'hidden' }}>
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-portal-bg-darkest relative overflow-hidden">
+      {/* Effets visuels de fond */}
       <FlickeringLights />
       <StaticNoise />
       <DemogorgonParticles />
-      
-      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(127, 29, 29, 0.2), #000000, rgba(88, 28, 135, 0.2))' }} />
-      
+
+      {/* Gradient de fond harmonisé */}
+      <div
+        className="absolute inset-0 opacity-40"
+        style={{
+          background:
+            'radial-gradient(ellipse at top, rgba(0, 212, 255, 0.15), transparent 50%), radial-gradient(ellipse at bottom, rgba(139, 92, 246, 0.15), transparent 50%)',
+        }}
+      />
+
+      {/* Grille de fond subtle */}
+      <div
+        className="absolute inset-0 opacity-5"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(0, 212, 255, 0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 212, 255, 0.3) 1px, transparent 1px)',
+          backgroundSize: '50px 50px',
+        }}
+      />
+
+      {/* Contenu principal */}
       <motion.div
-        initial={{ scale: 0.8, opacity: 0 }}
+        initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.8 }}
-        style={{ textAlign: 'center', position: 'relative', zIndex: 10 }}
+        transition={{ duration: 0.6, ease: 'easeOut' }}
+        className="text-center relative z-10 max-w-4xl"
       >
-        <GlitchText className="font-bold mb-4">
-          <h1 style={{ 
-            fontSize: '7rem', 
-            color: '#dc2626',
-            textShadow: '0 0 30px rgba(220, 38, 38, 0.8)',
-            fontWeight: 'bold'
-              }}>
-          LE PORTAIL
+        {/* Titre avec effet glitch */}
+        <GlitchText>
+          <h1
+            className="text-8xl md:text-9xl font-bold mb-6 tracking-wider"
+            style={{
+              color: '#00d4ff',
+              textShadow: `
+                0 0 40px rgba(0, 212, 255, 0.8),
+                0 0 80px rgba(0, 212, 255, 0.4),
+                0 0 120px rgba(139, 92, 246, 0.3)
+              `,
+            }}
+          >
+            LE PORTAIL
           </h1>
         </GlitchText>
 
+        {/* Sous-titre */}
         <motion.p
-          style={{ fontSize: '1.5rem', color: '#d1d5db', marginBottom: '1rem', fontFamily: 'monospace' }}
+          className="text-2xl text-portal-text-secondary mb-8 font-mono tracking-wide"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
+          transition={{ delay: 0.4 }}
         >
           L'Ombre approche...
         </motion.p>
 
+        {/* Avertissement animé */}
         <AnimatePresence>
           {showWarning && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              style={{ color: '#ef4444', fontSize: '0.875rem', marginBottom: '2rem', fontFamily: 'monospace', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}
+              exit={{ opacity: 0 }}
+              className="text-portal-danger text-sm mb-8 font-mono uppercase tracking-widest"
             >
-              ⚠ DANGER : ENTITÉ DÉTECTÉE ⚠
+              <motion.span
+                animate={{
+                  opacity: [0.5, 1, 0.5],
+                }}
+                transition={{
+                  duration: 1.5,
+                  repeat: Infinity,
+                  ease: 'easeInOut',
+                }}
+              >
+                ⚠ DANGER : ENTITÉ DÉTECTÉE ⚠
+              </motion.span>
             </motion.div>
           )}
         </AnimatePresence>
 
-        <div style={{ marginBottom: '3rem' }}>
+        {/* Portail visuel */}
+        <div className="my-12">
           <PortalVortex />
         </div>
 
+        {/* Bouton principal */}
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1 }}
-          style={{ marginTop: '3rem' }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8 }}
+          className="mt-12"
         >
           <Button
             onClick={() => onNavigate('login')}
-            className="text-xl px-12 py-4"
+            variant="primary"
+            className="text-xl px-12 py-5"
           >
-            🔓 ENTRER DANS LE PORTAIL
+            ENTRER DANS LE PORTAIL
           </Button>
         </motion.div>
 
+        {/* Lien admin discret */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.5 }}
+          className="mt-8"
+        >
+          <motion.button
+            onClick={() => onNavigate('admin')}
+            className="text-portal-text-muted hover:text-portal-secondary text-sm font-mono bg-transparent border-none cursor-pointer transition-colors duration-300"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            [ADMIN ACCESS]
+          </motion.button>
+        </motion.div>
+
+        {/* Indicateur de statut */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 2 }}
-          style={{ marginTop: '2rem' }}
+          className="mt-12 flex items-center justify-center gap-2 text-xs font-mono text-portal-text-muted"
         >
-          <button
-            onClick={() => onNavigate('admin')}
-            style={{ 
-              color: '#7f1d1d', 
-              fontSize: '0.875rem', 
-              transition: 'color 0.3s', 
-              fontFamily: 'monospace',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer'
+          <motion.div
+            className="w-2 h-2 rounded-full bg-portal-primary"
+            animate={{
+              opacity: [0.3, 1, 0.3],
             }}
-            onMouseEnter={(e) => e.currentTarget.style.color = '#991b1b'}
-            onMouseLeave={(e) => e.currentTarget.style.color = '#7f1d1d'}
-          >
-            [ADMIN ACCESS]
-          </button>
+            transition={{
+              duration: 2,
+              repeat: Infinity,
+              ease: 'easeInOut',
+            }}
+          />
+          <span>SYSTÈME ACTIF</span>
         </motion.div>
       </motion.div>
     </div>
