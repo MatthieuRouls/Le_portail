@@ -3,14 +3,12 @@ import { useState, useEffect } from 'react';
 import FlickeringLights from '../components/effects/FlickeringLights';
 import StaticNoise from '../components/effects/StaticNoise';
 import DemogorgonParticles from '../components/effects/DemogorgonParticles';
-import GlitchText from '../components/effects/GlitchText';
-import PortalVortex from '../components/effects/PortalVortex';
 
 interface HomeProps {
   onNavigate: (page: 'home' | 'login' | 'player' | 'admin') => void;
 }
 
-// Bouton cinématique moderne
+// Bouton cinématique
 const CinematicButton = ({ 
   children, 
   onClick, 
@@ -62,7 +60,6 @@ const CinematicButton = ({
         letterSpacing: '0.1em'
       }}
     >
-      {/* Effet de brillance animé */}
       <motion.div
         style={{
           position: 'absolute',
@@ -82,12 +79,10 @@ const CinematicButton = ({
         }}
       />
       
-      {/* Contenu du bouton */}
       <span style={{ position: 'relative', zIndex: 1 }}>
         {children}
       </span>
       
-      {/* Effet pulsant pour le bouton primaire */}
       {isPrimary && (
         <motion.div
           style={{
@@ -117,9 +112,8 @@ export default function Home({ onNavigate }: HomeProps) {
   const [showContent, setShowContent] = useState(false);
 
   useEffect(() => {
-    // Animation d'entrée progressive
-    setTimeout(() => setShowContent(true), 500);
-    setTimeout(() => setShowWarning(true), 3000);
+    setTimeout(() => setShowContent(true), 300);
+    setTimeout(() => setShowWarning(true), 2000);
   }, []);
 
   return (
@@ -138,33 +132,31 @@ export default function Home({ onNavigate }: HomeProps) {
       <StaticNoise />
       <DemogorgonParticles />
       
-      {/* Gradient radial plus dramatique */}
       <div style={{ 
         position: 'absolute', 
         inset: 0, 
-        background: 'radial-gradient(ellipse at center, rgba(127, 29, 29, 0.3) 0%, #000000 50%, rgba(88, 28, 135, 0.2) 100%)',
-        opacity: 0.8
+        background: 'radial-gradient(ellipse at center, rgba(127, 29, 29, 0.2) 0%, #000000 60%)',
+        opacity: 0.6
       }} />
       
-      {/* Vignette sombre sur les bords */}
       <div style={{
         position: 'absolute',
         inset: 0,
-        background: 'radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.5) 70%, rgba(0, 0, 0, 0.9) 100%)',
+        background: 'radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.4) 80%)',
         pointerEvents: 'none'
       }} />
       
       <AnimatePresence>
         {showContent && (
           <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
+            initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 1, ease: 'easeOut' }}
+            transition={{ duration: 0.8, ease: 'easeOut' }}
             style={{ 
               textAlign: 'center', 
               position: 'relative', 
               zIndex: 10,
-              maxWidth: '1200px',
+              maxWidth: '1000px',
               width: '100%',
               display: 'flex',
               flexDirection: 'column',
@@ -172,62 +164,99 @@ export default function Home({ onNavigate }: HomeProps) {
               gap: '2rem'
             }}
           >
-            {/* Logo titre avec effet glitch amélioré */}
+            {/* Titre "LE PORTAIL" avec police style Stranger Things */}
             <motion.div
-              initial={{ y: -50, opacity: 0 }}
+              initial={{ y: -30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.3, duration: 0.8 }}
+              style={{ position: 'relative', width: '100%' }}
             >
-              <GlitchText>
-                <h1 style={{ 
-                  fontSize: 'clamp(3rem, 12vw, 8rem)',
-                  color: '#dc2626',
-                  textShadow: `
-                    0 0 20px rgba(220, 38, 38, 0.8),
-                    0 0 40px rgba(220, 38, 38, 0.6),
-                    0 0 60px rgba(220, 38, 38, 0.4),
-                    0 0 100px rgba(220, 38, 38, 0.2)
-                  `,
+              {/* Ligne du haut (comme dans ST) */}
+              <div style={{
+                width: '90%',
+                height: '3px',
+                background: 'linear-gradient(90deg, transparent, #dc2626, transparent)',
+                margin: '0 auto 1.5rem',
+                boxShadow: '0 0 10px rgba(220, 38, 38, 0.8)'
+              }} />
+
+              {/* Titre principal */}
+              <h1 style={{
+                fontSize: 'clamp(3rem, 12vw, 7rem)',
+                fontFamily: "'Courier New', 'Courier', monospace",
+                fontWeight: 'bold',
+                color: 'transparent',
+                WebkitTextStroke: '3px #dc2626',
+                textStroke: '3px #dc2626',
+                textShadow: `
+                  0 0 10px rgba(220, 38, 38, 0.9),
+                  0 0 20px rgba(220, 38, 38, 0.7),
+                  0 0 40px rgba(220, 38, 38, 0.5),
+                  0 0 80px rgba(220, 38, 38, 0.3),
+                  0 0 120px rgba(220, 38, 38, 0.2)
+                `,
+                letterSpacing: '0.3em',
+                margin: 0,
+                position: 'relative',
+                lineHeight: 1
+              }}>
+                LE PORTAIL
+              </h1>
+              
+              {/* Effet de remplissage rouge qui pulse */}
+              <motion.h1
+                animate={{
+                  opacity: [0.2, 0.5, 0.2]
+                }}
+                transition={{
+                  duration: 3,
+                  repeat: Infinity,
+                  ease: 'easeInOut'
+                }}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  fontSize: 'clamp(3rem, 12vw, 7rem)',
+                  fontFamily: "'Courier New', 'Courier', monospace",
                   fontWeight: 'bold',
+                  color: '#dc2626',
+                  letterSpacing: '0.3em',
                   margin: 0,
-                  letterSpacing: '0.05em',
-                  lineHeight: 1.2
-                }}>
-                  LE PORTAIL
-                </h1>
-              </GlitchText>
+                  pointerEvents: 'none',
+                  lineHeight: 1
+                }}
+              >
+                LE PORTAIL
+              </motion.h1>
+
+              {/* Ligne du bas */}
+              <div style={{
+                width: '90%',
+                height: '3px',
+                background: 'linear-gradient(90deg, transparent, #dc2626, transparent)',
+                margin: '1.5rem auto 0',
+                boxShadow: '0 0 10px rgba(220, 38, 38, 0.8)'
+              }} />
             </motion.div>
 
-            {/* Sous-titre atmosphérique */}
-            <motion.div
+            {/* Sous-titre */}
+            <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.8, duration: 1 }}
-            >
-              <p style={{ 
+              transition={{ delay: 0.8, duration: 0.8 }}
+              style={{ 
                 fontSize: 'clamp(1rem, 3vw, 1.75rem)',
                 color: '#d1d5db', 
-                marginBottom: '1rem', 
                 fontFamily: 'monospace',
                 textShadow: '0 0 20px rgba(0, 0, 0, 0.8)',
-                letterSpacing: '0.15em'
-              }}>
-                L'Ombre approche...
-              </p>
-              
-              {/* Ligne décorative */}
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: '100%' }}
-                transition={{ delay: 1.2, duration: 0.8 }}
-                style={{
-                  height: '1px',
-                  maxWidth: '300px',
-                  margin: '0 auto',
-                  background: 'linear-gradient(90deg, transparent, rgba(220, 38, 38, 0.8), transparent)'
-                }}
-              />
-            </motion.div>
+                letterSpacing: '0.15em',
+                margin: 0
+              }}
+            >
+              L'Ombre approche...
+            </motion.p>
 
             {/* Message d'avertissement */}
             <AnimatePresence>
@@ -235,10 +264,10 @@ export default function Home({ onNavigate }: HomeProps) {
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
                   style={{ 
                     color: '#ef4444', 
                     fontSize: 'clamp(0.75rem, 2vw, 1rem)',
-                    marginBottom: '1rem', 
                     fontFamily: 'monospace',
                     padding: '0.75rem 1.5rem',
                     border: '1px solid rgba(239, 68, 68, 0.3)',
@@ -259,84 +288,50 @@ export default function Home({ onNavigate }: HomeProps) {
               )}
             </AnimatePresence>
 
-            {/* Portail central */}
-            <motion.div
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 1.5, duration: 1 }}
-              style={{ 
-                margin: '2rem 0',
-                position: 'relative'
-              }}
-            >
-              <PortalVortex />
-              
-              {/* Glow effect autour du portail */}
-              <motion.div
-                style={{
-                  position: 'absolute',
-                  inset: -20,
-                  borderRadius: '50%',
-                  background: 'radial-gradient(circle, rgba(220, 38, 38, 0.2) 0%, transparent 70%)',
-                  filter: 'blur(30px)',
-                  pointerEvents: 'none'
-                }}
-                animate={{
-                  scale: [1, 1.1, 1],
-                  opacity: [0.5, 0.8, 0.5]
-                }}
-                transition={{
-                  duration: 3,
-                  repeat: Infinity,
-                  ease: 'easeInOut'
-                }}
-              />
-            </motion.div>
-
             {/* Boutons d'action */}
             <motion.div
-              initial={{ opacity: 0, y: 30 }}
+              initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 2, duration: 0.8 }}
+              transition={{ delay: 1.2, duration: 0.8 }}
               style={{ 
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '1.5rem',
                 width: '100%',
                 maxWidth: '500px',
-                alignItems: 'center'
+                alignItems: 'center',
+                marginTop: '1rem'
               }}
             >
               <CinematicButton
                 onClick={() => onNavigate('login')}
-                delay={2.2}
+                delay={1.4}
               >
                 🔓 ENTRER DANS LE PORTAIL
               </CinematicButton>
 
-              {/* Texte descriptif sous le bouton principal */}
               <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{ delay: 2.5, duration: 1 }}
+                transition={{ delay: 1.8, duration: 1 }}
                 style={{
                   fontSize: '0.875rem',
                   color: '#6b7280',
                   fontFamily: 'monospace',
                   maxWidth: '400px',
                   lineHeight: 1.6,
-                  textAlign: 'center'
+                  textAlign: 'center',
+                  margin: 0
                 }}
               >
                 Connecte-toi pour rejoindre la bataille contre les ténèbres
               </motion.p>
 
-              {/* Bouton admin discret */}
               <motion.button
                 onClick={() => onNavigate('admin')}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{ delay: 3, duration: 1 }}
+                transition={{ delay: 2.2, duration: 1 }}
                 whileHover={{ 
                   color: '#dc2626',
                   textShadow: '0 0 10px rgba(220, 38, 38, 0.6)'
@@ -349,7 +344,6 @@ export default function Home({ onNavigate }: HomeProps) {
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
-                  marginTop: '1rem',
                   letterSpacing: '0.1em',
                   textTransform: 'uppercase'
                 }}
@@ -358,7 +352,7 @@ export default function Home({ onNavigate }: HomeProps) {
               </motion.button>
             </motion.div>
 
-            {/* Effet de particules flottantes autour du contenu */}
+            {/* Particules */}
             <motion.div
               style={{
                 position: 'absolute',
@@ -398,11 +392,11 @@ export default function Home({ onNavigate }: HomeProps) {
         )}
       </AnimatePresence>
 
-      {/* Footer avec crédits */}
+      {/* Footer */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 3.5, duration: 1 }}
+        transition={{ delay: 2.5, duration: 1 }}
         style={{
           position: 'absolute',
           bottom: '2rem',
@@ -413,8 +407,9 @@ export default function Home({ onNavigate }: HomeProps) {
           zIndex: 10
         }}
       >
-        <p>Stranger Things × Halloween 2025</p>
+        <p style={{ margin: 0 }}>Anniversaire Lisa × Halloween 2025</p>
       </motion.div>
     </div>
   );
 }
+
