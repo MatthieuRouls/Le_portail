@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import jsQR from 'jsqr';
 import Button from '../ui/Button';
 
 interface QRScannerMobileProps {
@@ -14,21 +15,30 @@ export default function QRScannerMobile({ onScanSuccess, onClose }: QRScannerMob
   const [hasPermission, setHasPermission] = useState(false);
   const [manualCode, setManualCode] = useState('');
   const [showManualInput, setShowManualInput] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [lastScan, setLastScan] = useState<string>('');
+  const [debugInfo, setDebugInfo] = useState<string>('');
   const streamRef = useRef<MediaStream | null>(null);
+  const scanningRef = useRef<boolean>(false);
+  const animationFrameRef = useRef<number>();
+  const scanCountRef = useRef<number>(0);
 
   useEffect(() => {
     startCamera();
 
     return () => {
       stopCamera();
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     };
   }, []);
 
   const startCamera = async () => {
     try {
-      // Vérifier si getUserMedia est supporté
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setError('Ton navigateur ne supporte pas l\'accès à la caméra. Utilise la saisie manuelle.');
+        setShowManualInput(true);
         return;
       }
 
@@ -47,9 +57,16 @@ export default function QRScannerMobile({ onScanSuccess, onClose }: QRScannerMob
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.setAttribute('playsinline', 'true');
-        videoRef.current.play();
-        setHasPermission(true);
-        console.log('✅ Caméra activée');
+        
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play();
+          setHasPermission(true);
+          setScanning(true);
+          console.log('✅ Caméra activée - Résolution:', videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);
+          
+          scanningRef.current = true;
+          startScanning();
+        };
       }
     } catch (err: any) {
       console.error('❌ Erreur caméra:', err);
@@ -73,12 +90,93 @@ export default function QRScannerMobile({ onScanSuccess, onClose }: QRScannerMob
     }
   };
 
+  const startScanning = () => {
+    const scan = () => {
+      if (!scanningRef.current || !videoRef.current || !canvasRef.current) {
+        return;
+      }
+
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const context = canvas.getContext('2d');
+
+      if (!context || video.readyState !== video.HAVE_ENOUGH_DATA) {
+        animationFrameRef.current = requestAnimationFrame(scan);
+        return;
+      }
+
+      // Ajuster la taille du canvas
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      // Dessiner la frame
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // Obtenir les données de l'image
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+
+      // Chercher un QR code avec plusieurs options
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'attemptBoth', // Essayer inversé aussi
+      });
+
+      scanCountRef.current++;
+      
+      // Debug toutes les 30 frames (environ 1 seconde)
+      if (scanCountRef.current % 30 === 0) {
+        setDebugInfo(`Scan #${scanCountRef.current} - ${canvas.width}x${canvas.height}px`);
+        console.log(`🔍 Scan #${scanCountRef.current}`, code ? '✅ QR détecté' : '⭕ Rien');
+      }
+
+      if (code && code.data) {
+        console.log('🎯 QR Code détecté !', code.data);
+        console.log('📍 Position:', code.location);
+        
+        // Éviter les scans répétés
+        if (code.data !== lastScan) {
+          setLastScan(code.data);
+          handleQRCodeDetected(code.data);
+          return;
+        }
+      }
+
+      // Continuer le scan
+      animationFrameRef.current = requestAnimationFrame(scan);
+    };
+
+    scan();
+  };
+
+  const handleQRCodeDetected = (qrData: string) => {
+    console.log('✅ QR Code scanné:', qrData);
+    scanningRef.current = false;
+    
+    // Le QR code contient maintenant juste l'ID du joueur
+    let playerId = qrData.trim().toLowerCase();
+    
+    console.log('👤 Player ID extrait:', playerId);
+    
+    // Vibration
+    if (navigator.vibrate) {
+      navigator.vibrate(200);
+    }
+    
+    stopCamera();
+    onScanSuccess(playerId);
+  };
+
   const stopCamera = () => {
+    scanningRef.current = false;
+    
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => {
         track.stop();
-        console.log('🛑 Caméra arrêtée');
       });
+      console.log('🛑 Caméra arrêtée');
     }
   };
 
@@ -87,17 +185,8 @@ export default function QRScannerMobile({ onScanSuccess, onClose }: QRScannerMob
       alert('Entre un code joueur valide');
       return;
     }
+    stopCamera();
     onScanSuccess(manualCode.trim().toLowerCase());
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Pour l'instant, on simule - dans une vraie version il faudrait
-    // une bibliothèque comme jsQR pour décoder l'image
-    alert('📸 Photo reçue ! Pour l\'instant, utilise la saisie manuelle du code joueur.');
-    setShowManualInput(true);
   };
 
   return (
@@ -128,7 +217,33 @@ export default function QRScannerMobile({ onScanSuccess, onClose }: QRScannerMob
           📷 SCANNER LE QR CODE
         </h2>
 
-        {/* Message d'erreur */}
+        {scanning && !error && (
+          <div>
+            <motion.p
+              animate={{ opacity: [1, 0.5, 1] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+              style={{
+                color: '#10b981',
+                fontFamily: 'monospace',
+                fontSize: '0.875rem',
+                marginBottom: '0.5rem'
+              }}
+            >
+              🔍 Recherche en cours...
+            </motion.p>
+            {debugInfo && (
+              <p style={{
+                color: '#6b7280',
+                fontFamily: 'monospace',
+                fontSize: '0.7rem',
+                marginBottom: '1rem'
+              }}>
+                {debugInfo}
+              </p>
+            )}
+          </div>
+        )}
+
         <AnimatePresence>
           {error && (
             <motion.div
@@ -156,7 +271,6 @@ export default function QRScannerMobile({ onScanSuccess, onClose }: QRScannerMob
           )}
         </AnimatePresence>
 
-        {/* Vidéo caméra */}
         {!error && (
           <div style={{
             position: 'relative',
@@ -198,7 +312,6 @@ export default function QRScannerMobile({ onScanSuccess, onClose }: QRScannerMob
               style={{ display: 'none' }}
             />
             
-            {/* Cadre de visée */}
             {hasPermission && (
               <div style={{
                 position: 'absolute',
@@ -212,7 +325,28 @@ export default function QRScannerMobile({ onScanSuccess, onClose }: QRScannerMob
                 boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.5)',
                 pointerEvents: 'none'
               }}>
-                {/* Coins du cadre */}
+                {scanning && (
+                  <motion.div
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: '3px',
+                      backgroundColor: '#10b981',
+                      boxShadow: '0 0 10px #10b981'
+                    }}
+                    animate={{
+                      top: ['0%', '100%', '0%']
+                    }}
+                    transition={{
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: 'linear'
+                    }}
+                  />
+                )}
+                
                 <div style={{ position: 'absolute', top: '-3px', left: '-3px', width: '30px', height: '30px', borderTop: '5px solid #10b981', borderLeft: '5px solid #10b981' }} />
                 <div style={{ position: 'absolute', top: '-3px', right: '-3px', width: '30px', height: '30px', borderTop: '5px solid #10b981', borderRight: '5px solid #10b981' }} />
                 <div style={{ position: 'absolute', bottom: '-3px', left: '-3px', width: '30px', height: '30px', borderBottom: '5px solid #10b981', borderLeft: '5px solid #10b981' }} />
@@ -222,7 +356,6 @@ export default function QRScannerMobile({ onScanSuccess, onClose }: QRScannerMob
           </div>
         )}
 
-        {/* Saisie manuelle */}
         <AnimatePresence>
           {showManualInput && (
             <motion.div
@@ -285,7 +418,6 @@ export default function QRScannerMobile({ onScanSuccess, onClose }: QRScannerMob
           )}
         </AnimatePresence>
 
-        {/* Alternatives */}
         <div style={{ display: 'grid', gap: '0.75rem', marginBottom: '1rem' }}>
           {!showManualInput && (
             <button
@@ -305,34 +437,12 @@ export default function QRScannerMobile({ onScanSuccess, onClose }: QRScannerMob
               ⌨️ SAISIE MANUELLE
             </button>
           )}
-
-          <label style={{
-            display: 'block',
-            backgroundColor: '#6366f1',
-            color: '#ffffff',
-            padding: '0.75rem 1.5rem',
-            borderRadius: '0.5rem',
-            fontFamily: 'monospace',
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            textAlign: 'center'
-          }}>
-            📸 PRENDRE UNE PHOTO
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={handleFileUpload}
-              style={{ display: 'none' }}
-            />
-          </label>
         </div>
 
-        <Button onClick={onClose} variant="secondary" style={{ width: '100%' }}>
+        <Button onClick={() => { stopCamera(); onClose(); }} variant="secondary" style={{ width: '100%' }}>
           ANNULER
         </Button>
 
-        {/* Info technique */}
         <p style={{
           color: '#6b7280',
           fontSize: '0.7rem',
@@ -340,7 +450,7 @@ export default function QRScannerMobile({ onScanSuccess, onClose }: QRScannerMob
           fontFamily: 'monospace',
           lineHeight: '1.4'
         }}>
-          💡 En cas de problème avec la caméra, utilise la saisie manuelle ou la sélection de joueur
+          💡 Place le QR code dans le cadre vert. Tiens ton téléphone stable.
         </p>
       </div>
     </motion.div>

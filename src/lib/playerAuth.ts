@@ -9,25 +9,37 @@ export async function loginWithQRCode(qrCodeData: string): Promise<{
   error?: string;
 }> {
   try {
-    // Extraire le code QR de l'URL scannée
-    const url = new URL(qrCodeData);
-    const qrCode = url.pathname.split('/').pop();
+    console.log('🔐 Login avec QR code:', qrCodeData);
+    
+    let qrCode = qrCodeData.trim();
+    
+    // Essayer de parser comme URL (pour les anciens QR codes)
+    try {
+      const url = new URL(qrCodeData);
+      qrCode = url.pathname.split('/').pop() || qrCodeData;
+      console.log('📍 URL détectée, extraction:', qrCode);
+    } catch {
+      // Pas une URL, c'est juste un ID direct (nouveau format)
+      console.log('📝 ID direct détecté:', qrCode);
+    }
+    
+    // Nettoyer l'ID
+    qrCode = qrCode.toLowerCase().trim();
 
     if (!qrCode) {
       return { success: false, error: 'QR code invalide' };
     }
 
-    // Chercher le joueur avec ce QR code
-    const playersRef = collection(db, 'players');
-    const q = query(playersRef, where('qrCode', '==', qrCode));
-    const querySnapshot = await getDocs(q);
-
-    if (querySnapshot.empty) {
+    // Chercher le joueur avec cet ID directement
+    const playerDoc = await getDoc(doc(db, 'players', qrCode));
+    
+    if (!playerDoc.exists()) {
+      console.error('❌ Joueur non trouvé:', qrCode);
       return { success: false, error: 'Joueur non trouvé' };
     }
 
-    const playerDoc = querySnapshot.docs[0];
     const playerData = playerDoc.data();
+    console.log('✅ Joueur trouvé:', playerData.name);
 
     // Sauvegarder dans localStorage
     localStorage.setItem('currentPlayer', JSON.stringify({
@@ -43,7 +55,7 @@ export async function loginWithQRCode(qrCodeData: string): Promise<{
       role: playerData.role
     };
   } catch (error) {
-    console.error('Erreur de connexion:', error);
+    console.error('❌ Erreur de connexion:', error);
     return { success: false, error: 'Erreur de connexion' };
   }
 }

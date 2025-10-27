@@ -12,17 +12,21 @@ export async function generateAllQRCodes() {
     for (const doc of playersSnapshot.docs) {
       const player = doc.data();
       
-      // Créer l'URL de connexion (sera utilisée pour scanner)
-      const loginUrl = `${window.location.origin}/scan/${player.qrCode}`;
+      // Données à encoder : juste l'ID du joueur pour simplifier
+      const qrData = player.id;
+      
+      console.log(`Génération QR pour ${player.name} avec data:`, qrData);
       
       // Générer le QR code en Data URL (base64)
-      const dataUrl = await QRCode.toDataURL(loginUrl, {
+      // NOIR SUR BLANC pour un meilleur scan
+      const dataUrl = await QRCode.toDataURL(qrData, {
         width: 300,
         margin: 2,
         color: {
-          dark: '#dc2626',  // Rouge
-          light: '#000000'  // Fond noir
-        }
+          dark: '#000000',  // Noir (le QR code lui-même)
+          light: '#FFFFFF'  // Blanc (le fond)
+        },
+        errorCorrectionLevel: 'H' // Haute correction d'erreur
       });
 
       qrCodes.push({
@@ -55,7 +59,6 @@ export async function downloadQRCode(dataUrl: string, playerName: string) {
 export async function downloadAllQRCodes(qrCodes: { playerId: string; playerName: string; dataUrl: string }[]) {
   for (const qr of qrCodes) {
     await downloadQRCode(qr.dataUrl, qr.playerName);
-    // Petit délai entre chaque téléchargement
     await new Promise(resolve => setTimeout(resolve, 200));
   }
   console.log('✅ Tous les QR codes téléchargés !');

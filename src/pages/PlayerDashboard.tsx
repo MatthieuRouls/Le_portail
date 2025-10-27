@@ -6,18 +6,24 @@ import GlitchText from '../components/effects/GlitchText';
 import PortalGauge from '../components/ui/PortalGauge';
 import QRScannerMobile from '../components/game/QRScannerMobile';
 import PlayerSelector from '../components/game/PlayerSelector';
+import SuspectSelector from '../components/game/SuspectSelector';
+import VotingInterface from '../components/game/VotingInterface';
+import EndGameScreen from '../components/game/EndGameScreen';
 import { useGameState } from '../hooks/useGameState';
 import { usePlayerData } from '../hooks/usePlayerData';
 import { useGameEvents } from '../hooks/useGameEvents';
+import { useEndGameState } from '../hooks/useEndGameState';
 import { getCurrentPlayer } from '../lib/playerAuth';
 import { validateMission } from '../lib/missionValidator';
+import { addSuspect, removeSuspect } from '../lib/suspectsManager';
+import { startVotingSession, getActiveVotingSession } from '../lib/votingSystem';
+import { debugScanResult } from '../lib/debugMission';
 
 interface PlayerDashboardProps {
   onNavigate: (page: 'home' | 'login' | 'player') => void;
 }
 
-// Composant Card moderne et épuré
-const ModernCard = ({ children, className = '', style = {} }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) => (
+const ModernCard = ({ children, style = {} }: { children: React.ReactNode; style?: React.CSSProperties }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
@@ -33,44 +39,56 @@ const ModernCard = ({ children, className = '', style = {} }: { children: React.
       overflow: 'hidden',
       ...style
     }}
-    className={className}
   >
     {children}
   </motion.div>
 );
 
-// Bouton moderne
-const ModernButton = ({ children, onClick, variant = 'primary', style = {} }: { children: React.ReactNode; onClick?: () => void; variant?: 'primary' | 'secondary'; style?: React.CSSProperties }) => {
+const ModernButton = ({ 
+  children, 
+  onClick, 
+  variant = 'primary', 
+  disabled = false, 
+  style = {} 
+}: { 
+  children: React.ReactNode; 
+  onClick?: () => void; 
+  variant?: 'primary' | 'secondary' | 'danger'; 
+  disabled?: boolean; 
+  style?: React.CSSProperties 
+}) => {
   const isPrimary = variant === 'primary';
+  const isDanger = variant === 'danger';
   
   return (
     <motion.button
       onClick={onClick}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
+      disabled={disabled}
+      whileHover={!disabled ? { scale: 1.02 } : {}}
+      whileTap={!disabled ? { scale: 0.98 } : {}}
       style={{
         width: '100%',
         padding: '0.875rem 1.5rem',
-        backgroundColor: isPrimary ? 'rgba(127, 29, 29, 0.6)' : 'rgba(40, 40, 40, 0.6)',
-        border: isPrimary ? '1px solid rgba(220, 38, 38, 0.5)' : '1px solid rgba(75, 85, 99, 0.5)',
+        backgroundColor: isDanger 
+          ? 'rgba(220, 38, 38, 0.6)' 
+          : isPrimary 
+          ? 'rgba(127, 29, 29, 0.6)' 
+          : 'rgba(40, 40, 40, 0.6)',
+        border: isDanger
+          ? '1px solid rgba(220, 38, 38, 0.8)'
+          : isPrimary 
+          ? '1px solid rgba(220, 38, 38, 0.5)' 
+          : '1px solid rgba(75, 85, 99, 0.5)',
         borderRadius: '8px',
         color: '#e5e7eb',
         fontFamily: 'monospace',
         fontSize: '0.875rem',
         fontWeight: '600',
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
         transition: 'all 0.3s ease',
         backdropFilter: 'blur(5px)',
-        boxShadow: isPrimary ? '0 0 15px rgba(220, 38, 38, 0.2)' : 'none',
+        opacity: disabled ? 0.5 : 1,
         ...style
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = isPrimary ? 'rgba(127, 29, 29, 0.8)' : 'rgba(55, 55, 55, 0.8)';
-        e.currentTarget.style.borderColor = isPrimary ? 'rgba(220, 38, 38, 0.8)' : 'rgba(107, 114, 128, 0.8)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = isPrimary ? 'rgba(127, 29, 29, 0.6)' : 'rgba(40, 40, 40, 0.6)';
-        e.currentTarget.style.borderColor = isPrimary ? 'rgba(220, 38, 38, 0.5)' : 'rgba(75, 85, 99, 0.5)';
       }}
     >
       {children}
@@ -83,10 +101,18 @@ export default function PlayerDashboard({ onNavigate }: PlayerDashboardProps) {
   const { gameState, loading: gameLoading } = useGameState();
   const { playerData, loading: playerLoading } = usePlayerData(currentPlayer?.id || null);
   const { events, loading: eventsLoading } = useGameEvents(5);
+  const { gameEnded, endGameStats } = useEndGameState();
   
   const [showScanner, setShowScanner] = useState(false);
   const [showSelector, setShowSelector] = useState(false);
+  const [showSuspectSelector, setShowSuspectSelector] = useState(false);
+  const [showVotingInterface, setShowVotingInterface] = useState(false);
   const [validationMessage, setValidationMessage] = useState('');
+  const [suspectMessage, setSuspectMessage] = useState('');
+  const [votingMessage, setVotingMessage] = useState('');
+  const [isValidating, setIsValidating] = useState(false);
+  const [isStartingVote, setIsStartingVote] = useState(false);
+  const [hasActiveVote, setHasActiveVote] = useState(false);
 
   useEffect(() => {
     if (!currentPlayer) {
@@ -94,15 +120,86 @@ export default function PlayerDashboard({ onNavigate }: PlayerDashboardProps) {
     }
   }, [currentPlayer, onNavigate]);
 
+  useEffect(() => {
+    checkActiveVote();
+    const interval = setInterval(checkActiveVote, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const checkActiveVote = async () => {
+    const activeSession = await getActiveVotingSession();
+    setHasActiveVote(!!activeSession);
+  };
+
   const handlePlayerScan = async (playerId: string) => {
     setShowScanner(false);
     setShowSelector(false);
     
     if (!currentPlayer?.id) return;
     
-    const result = await validateMission(playerId, currentPlayer.id);
-    setValidationMessage(result.message);
-    setTimeout(() => setValidationMessage(''), 5000);
+    setIsValidating(true);
+    setValidationMessage('⏳ Validation en cours...');
+    
+    try {
+      await debugScanResult(playerId, currentPlayer.id);
+      const result = await validateMission(playerId, currentPlayer.id);
+      setValidationMessage(result.message);
+      setTimeout(() => setValidationMessage(''), 5000);
+    } catch (error) {
+      setValidationMessage(`❌ Erreur : ${error}`);
+      setTimeout(() => setValidationMessage(''), 5000);
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleAddSuspect = async (suspectId: string, suspectName: string) => {
+    setShowSuspectSelector(false);
+    if (!currentPlayer?.id) return;
+    
+    const result = await addSuspect(currentPlayer.id, suspectId);
+    setSuspectMessage(result.message);
+    setTimeout(() => setSuspectMessage(''), 3000);
+  };
+
+  const handleRemoveSuspect = async (suspectId: string) => {
+    if (!currentPlayer?.id) return;
+    
+    const result = await removeSuspect(currentPlayer.id, suspectId);
+    setSuspectMessage(result.message);
+    setTimeout(() => setSuspectMessage(''), 3000);
+  };
+
+  const handleStartVoting = async () => {
+    if (!currentPlayer?.id) return;
+    
+    const confirmed = confirm(
+      '⚠️ LANCER UNE RÉUNION ?\n\nTous les joueurs seront invités à voter pour éliminer quelqu\'un.\n\nContinuer ?'
+    );
+    
+    if (!confirmed) return;
+    
+    setIsStartingVote(true);
+    
+    const result = await startVotingSession(currentPlayer.id);
+    
+    if (result.success) {
+      setVotingMessage(result.message);
+      setHasActiveVote(true);
+      setTimeout(() => {
+        setVotingMessage('');
+        setShowVotingInterface(true);
+      }, 1500);
+    } else {
+      setVotingMessage(`❌ ${result.message}`);
+      setTimeout(() => setVotingMessage(''), 3000);
+    }
+    
+    setIsStartingVote(false);
+  };
+
+  const handleJoinVote = () => {
+    setShowVotingInterface(true);
   };
 
   if (!currentPlayer || gameLoading || playerLoading) {
@@ -118,6 +215,17 @@ export default function PlayerDashboard({ onNavigate }: PlayerDashboardProps) {
       }}>
         ⏳ Chargement...
       </div>
+    );
+  }
+
+  // Afficher l'écran de fin si le jeu est terminé
+  if (gameEnded && endGameStats) {
+    return (
+      <EndGameScreen
+        stats={endGameStats}
+        currentPlayerId={currentPlayer?.id}
+        onClose={() => onNavigate('home')}
+      />
     );
   }
 
@@ -202,7 +310,6 @@ export default function PlayerDashboard({ onNavigate }: PlayerDashboardProps) {
           </motion.div>
         </div>
 
-        {/* Grid */}
         <div style={{ 
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
@@ -218,27 +325,75 @@ export default function PlayerDashboard({ onNavigate }: PlayerDashboardProps) {
             </ModernCard>
           </div>
 
+          {/* Notification vote actif */}
+          {hasActiveVote && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{ gridColumn: '1 / -1' }}
+            >
+              <ModernCard style={{ 
+                border: '2px solid #dc2626',
+                backgroundColor: 'rgba(220, 38, 38, 0.1)'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '1rem',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <motion.span
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ duration: 1, repeat: Infinity }}
+                      style={{ fontSize: '2rem' }}
+                    >
+                      🗳️
+                    </motion.span>
+                    <div>
+                      <h3 style={{
+                        color: '#dc2626',
+                        fontSize: '1rem',
+                        fontWeight: 'bold',
+                        fontFamily: 'monospace',
+                        marginBottom: '0.25rem'
+                      }}>
+                        RÉUNION EN COURS
+                      </h3>
+                      <p style={{
+                        color: '#9ca3af',
+                        fontSize: '0.75rem',
+                        fontFamily: 'monospace',
+                        margin: 0
+                      }}>
+                        Un vote est en cours !
+                      </p>
+                    </div>
+                  </div>
+                  <ModernButton
+                    onClick={handleJoinVote}
+                    variant="danger"
+                    style={{ minWidth: '200px' }}
+                  >
+                    REJOINDRE
+                  </ModernButton>
+                </div>
+              </ModernCard>
+            </motion.div>
+          )}
+
           {/* Mission */}
           <ModernCard style={{ gridColumn: '1 / -1' }}>
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '0.75rem', 
-              marginBottom: '1.25rem',
-              paddingBottom: '1rem',
-              borderBottom: '1px solid rgba(127, 29, 29, 0.2)'
+            <h3 style={{ 
+              fontSize: '1rem', 
+              fontWeight: '600', 
+              color: '#e5e7eb', 
+              fontFamily: 'monospace',
+              marginBottom: '1.25rem'
             }}>
-              <span style={{ fontSize: '1.5rem' }}>⚙</span>
-              <h3 style={{ 
-                fontSize: '1rem', 
-                fontWeight: '600', 
-                color: '#e5e7eb', 
-                fontFamily: 'monospace',
-                margin: 0
-              }}>
-                MISSION ACTIVE
-              </h3>
-            </div>
+              ⚙ MISSION ACTIVE
+            </h3>
             
             {validationMessage && (
               <motion.div
@@ -248,9 +403,9 @@ export default function PlayerDashboard({ onNavigate }: PlayerDashboardProps) {
                   backgroundColor: validationMessage.includes('✅') 
                     ? 'rgba(16, 185, 129, 0.2)' 
                     : 'rgba(239, 68, 68, 0.2)',
-                  border: validationMessage.includes('✅')
-                    ? '1px solid rgba(16, 185, 129, 0.5)'
-                    : '1px solid rgba(239, 68, 68, 0.5)',
+                  border: '1px solid ' + (validationMessage.includes('✅') 
+                    ? 'rgba(16, 185, 129, 0.5)' 
+                    : 'rgba(239, 68, 68, 0.5)'),
                   borderRadius: '0.5rem',
                   padding: '1rem',
                   marginBottom: '1rem',
@@ -295,27 +450,87 @@ export default function PlayerDashboard({ onNavigate }: PlayerDashboardProps) {
                 </div>
                 
                 <div style={{ display: 'grid', gap: '0.75rem' }}>
-                  <ModernButton onClick={() => setShowScanner(true)}>
+                  <ModernButton onClick={() => setShowScanner(true)} disabled={isValidating}>
                     📷 SCANNER UN QR CODE
                   </ModernButton>
-                  <ModernButton onClick={() => setShowSelector(true)} variant="secondary">
+                  <ModernButton onClick={() => setShowSelector(true)} variant="secondary" disabled={isValidating}>
                     👥 SÉLECTIONNER UN JOUEUR
                   </ModernButton>
                 </div>
               </>
             ) : (
-              <div style={{ 
-                textAlign: 'center', 
-                color: '#9ca3af', 
-                fontFamily: 'monospace',
-                padding: '2rem'
-              }}>
+              <div style={{ textAlign: 'center', color: '#9ca3af', fontFamily: 'monospace', padding: '2rem' }}>
                 Aucune mission active
               </div>
             )}
           </ModernCard>
 
-          {/* Rôle */}
+          {/* Réunion */}
+          <ModernCard style={{ gridColumn: '1 / -1' }}>
+            <h3 style={{ 
+              fontSize: '1rem', 
+              fontWeight: '600', 
+              color: '#e5e7eb', 
+              fontFamily: 'monospace',
+              marginBottom: '1.25rem'
+            }}>
+              🗳️ RÉUNION & VOTE
+            </h3>
+
+            {votingMessage && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                style={{
+                  backgroundColor: votingMessage.includes('✅') ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                  border: '1px solid ' + (votingMessage.includes('✅') ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)'),
+                  borderRadius: '0.5rem',
+                  padding: '1rem',
+                  marginBottom: '1rem',
+                  textAlign: 'center',
+                  color: votingMessage.includes('✅') ? '#10b981' : '#ef4444',
+                  fontFamily: 'monospace',
+                  fontSize: '0.875rem'
+                }}
+              >
+                {votingMessage}
+              </motion.div>
+            )}
+
+            <div style={{
+              backgroundColor: 'rgba(127, 29, 29, 0.15)',
+              borderRadius: '8px',
+              padding: '1.25rem',
+              border: '1px solid rgba(127, 29, 29, 0.2)',
+              marginBottom: '1rem'
+            }}>
+              <p style={{
+                color: '#d1d5db',
+                fontFamily: 'monospace',
+                fontSize: '0.875rem',
+                lineHeight: '1.6',
+                margin: 0
+              }}>
+                Convoque une réunion pour voter et éliminer un joueur suspect.
+              </p>
+            </div>
+
+            {hasActiveVote ? (
+              <ModernButton onClick={handleJoinVote} variant="danger">
+                🗳️ REJOINDRE LE VOTE
+              </ModernButton>
+            ) : (
+              <ModernButton 
+                onClick={handleStartVoting} 
+                variant="danger"
+                disabled={isStartingVote}
+              >
+                {isStartingVote ? '⏳ LANCEMENT...' : '🗳️ LANCER UNE RÉUNION'}
+              </ModernButton>
+            )}
+          </ModernCard>
+
+          {/* Rôle et Progression */}
           <ModernCard>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <span style={{ fontSize: '2rem' }}>
@@ -343,24 +558,20 @@ export default function PlayerDashboard({ onNavigate }: PlayerDashboardProps) {
             </div>
           </ModernCard>
 
-          {/* Progression */}
           <ModernCard>
             <h3 style={{ 
               fontSize: '0.875rem', 
               fontWeight: '600', 
               color: '#9ca3af', 
               marginBottom: '1rem', 
-              fontFamily: 'monospace',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em'
+              fontFamily: 'monospace'
             }}>
-              Progression
+              PROGRESSION
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <div style={{ 
                 display: 'flex', 
                 justifyContent: 'space-between', 
-                alignItems: 'center', 
                 fontFamily: 'monospace', 
                 fontSize: '0.875rem' 
               }}>
@@ -382,9 +593,8 @@ export default function PlayerDashboard({ onNavigate }: PlayerDashboardProps) {
                     height: '100%', 
                     borderRadius: '999px'
                   }}
-                  initial={{ width: 0 }}
                   animate={{ width: `${progressPercentage}%` }}
-                  transition={{ duration: 1, delay: 0.3 }}
+                  transition={{ duration: 1 }}
                 />
               </div>
             </div>
@@ -397,26 +607,42 @@ export default function PlayerDashboard({ onNavigate }: PlayerDashboardProps) {
               fontWeight: '600', 
               color: '#9ca3af', 
               marginBottom: '1rem', 
-              fontFamily: 'monospace',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em'
+              fontFamily: 'monospace'
             }}>
-              Suspects surveillés
+              SUSPECTS SURVEILLÉS
             </h3>
+            
+            {suspectMessage && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                style={{
+                  backgroundColor: suspectMessage.includes('✅') ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                  border: '1px solid ' + (suspectMessage.includes('✅') ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)'),
+                  borderRadius: '0.5rem',
+                  padding: '1rem',
+                  marginBottom: '1rem',
+                  textAlign: 'center',
+                  color: suspectMessage.includes('✅') ? '#10b981' : '#ef4444',
+                  fontFamily: 'monospace',
+                  fontSize: '0.875rem'
+                }}
+              >
+                {suspectMessage}
+              </motion.div>
+            )}
+            
             {playerData?.suspicions && playerData.suspicions.length > 0 ? (
               <>
                 <div style={{ 
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 200px), 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
                   gap: '0.75rem',
                   marginBottom: '1rem'
                 }}>
-                  {playerData.suspicions.map((suspectId, i) => (
-                    <motion.div
+                  {playerData.suspicions.map((suspectId: string) => (
+                    <div
                       key={suspectId}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.1 }}
                       style={{ 
                         backgroundColor: 'rgba(127, 29, 29, 0.15)', 
                         borderRadius: '6px', 
@@ -424,31 +650,39 @@ export default function PlayerDashboard({ onNavigate }: PlayerDashboardProps) {
                         border: '1px solid rgba(127, 29, 29, 0.2)', 
                         fontFamily: 'monospace', 
                         fontSize: '0.8125rem',
-                        color: '#e5e7eb'
+                        color: '#e5e7eb',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
                       }}
                     >
-                      ▸ {suspectId}
-                    </motion.div>
+                      <span>▸ {suspectId}</span>
+                      <button
+                        onClick={() => handleRemoveSuspect(suspectId)}
+                        style={{
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          fontSize: '1rem'
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   ))}
                 </div>
-                <ModernButton variant="secondary">
-                  ➕ AJOUTER UN SUSPECT
+                <ModernButton onClick={() => setShowSuspectSelector(true)} variant="secondary">
+                  ➕ AJOUTER
                 </ModernButton>
               </>
             ) : (
               <>
-                <div style={{ 
-                  textAlign: 'center', 
-                  color: '#6b7280', 
-                  fontFamily: 'monospace',
-                  fontSize: '0.875rem',
-                  padding: '2rem',
-                  marginBottom: '1rem'
-                }}>
-                  Aucun suspect pour le moment
+                <div style={{ textAlign: 'center', color: '#6b7280', fontFamily: 'monospace', fontSize: '0.875rem', padding: '2rem', marginBottom: '1rem' }}>
+                  Aucun suspect
                 </div>
-                <ModernButton variant="secondary">
-                  ➕ AJOUTER UN SUSPECT
+                <ModernButton onClick={() => setShowSuspectSelector(true)} variant="secondary">
+                  ➕ AJOUTER
                 </ModernButton>
               </>
             )}
@@ -461,72 +695,61 @@ export default function PlayerDashboard({ onNavigate }: PlayerDashboardProps) {
               fontWeight: '600', 
               color: '#9ca3af', 
               marginBottom: '1rem', 
-              fontFamily: 'monospace',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em'
+              fontFamily: 'monospace'
             }}>
-              Événements récents
+              ÉVÉNEMENTS RÉCENTS
             </h3>
             {eventsLoading ? (
-              <div style={{ 
-                textAlign: 'center', 
-                color: '#6b7280', 
-                fontFamily: 'monospace',
-                fontSize: '0.875rem',
-                padding: '1rem'
-              }}>
+              <div style={{ textAlign: 'center', color: '#6b7280', fontFamily: 'monospace', padding: '1rem' }}>
                 Chargement...
               </div>
             ) : events.length > 0 ? (
-              <div style={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                gap: '0.625rem', 
-                fontSize: '0.8125rem', 
-                fontFamily: 'monospace' 
-              }}>
-                {events.map((event, i) => (
-                  <motion.div 
-                    key={event.id}
-                    style={{ color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.1 }}
-                  >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', fontSize: '0.8125rem', fontFamily: 'monospace' }}>
+                {events.map((event) => (
+                  <div key={event.id} style={{ color: '#9ca3af', display: 'flex', gap: '0.5rem' }}>
                     <span style={{ color: '#dc2626' }}>•</span> {event.message}
-                  </motion.div>
+                  </div>
                 ))}
               </div>
             ) : (
-              <div style={{ 
-                textAlign: 'center', 
-                color: '#6b7280', 
-                fontFamily: 'monospace',
-                fontSize: '0.875rem',
-                padding: '2rem'
-              }}>
-                Aucun événement récent
+              <div style={{ textAlign: 'center', color: '#6b7280', fontFamily: 'monospace', padding: '2rem' }}>
+                Aucun événement
               </div>
             )}
           </ModernCard>
         </div>
       </div>
 
-      {/* Modals */}
       {showScanner && (
         <QRScannerMobile
-          onScanSuccess={(qrData) => {
-            const playerId = qrData.split('/').pop() || '';
-            handlePlayerScan(playerId);
-          }}
+          onScanSuccess={handlePlayerScan}
           onClose={() => setShowScanner(false)}
         />
       )}
 
       {showSelector && (
         <PlayerSelector
-          onSelect={(playerId) => handlePlayerScan(playerId)}
+          onSelect={handlePlayerScan}
           onClose={() => setShowSelector(false)}
+        />
+      )}
+
+      {showSuspectSelector && (
+        <SuspectSelector
+          currentPlayerId={currentPlayer.id}
+          currentSuspicions={playerData?.suspicions || []}
+          onSelect={handleAddSuspect}
+          onClose={() => setShowSuspectSelector(false)}
+        />
+      )}
+
+      {showVotingInterface && (
+        <VotingInterface
+          currentPlayerId={currentPlayer.id}
+          onClose={() => {
+            setShowVotingInterface(false);
+            checkActiveVote();
+          }}
         />
       )}
     </div>

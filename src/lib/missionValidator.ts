@@ -1,6 +1,7 @@
 import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from './firebase';
 import { GameEvents } from './gameEvents';
+import { checkGameEnd, triggerGameEnd } from './endGameManager';
 
 export interface MissionValidationResult {
   success: boolean;
@@ -8,6 +9,7 @@ export interface MissionValidationResult {
   isCorrectTarget?: boolean;
   missionCompleted?: boolean;
   portalChange?: number;
+  gameEnded?: boolean;
 }
 
 export async function validateMission(
@@ -15,30 +17,44 @@ export async function validateMission(
   currentPlayerId: string
 ): Promise<MissionValidationResult> {
   try {
-    // Récupérer les données du joueur actuel
+    console.log('\n🔍 === VALIDATION MISSION ===');
+    console.log('Joueur scanné:', scannedPlayerId);
+    console.log('Joueur actuel:', currentPlayerId);
+    
+    const cleanedScannedId = scannedPlayerId.trim().toLowerCase();
+    console.log('ID nettoyé:', cleanedScannedId);
+    
     const playerDoc = await getDoc(doc(db, 'players', currentPlayerId));
     if (!playerDoc.exists()) {
+      console.error('❌ Joueur actuel introuvable');
       return { success: false, message: 'Joueur introuvable' };
     }
 
     const playerData = playerDoc.data();
     const currentMission = playerData.currentMission;
 
-    // Vérifier qu'il y a une mission active
+    console.log('Mission actuelle:', currentMission);
+
     if (!currentMission) {
+      console.error('❌ Aucune mission active');
       return { success: false, message: 'Aucune mission active' };
     }
 
-    // Récupérer les données du joueur scanné
-    const scannedPlayerDoc = await getDoc(doc(db, 'players', scannedPlayerId));
+    const scannedPlayerDoc = await getDoc(doc(db, 'players', cleanedScannedId));
     if (!scannedPlayerDoc.exists()) {
-      return { success: false, message: 'Joueur scanné introuvable' };
+      console.error('❌ Joueur scanné introuvable:', cleanedScannedId);
+      return { 
+        success: false, 
+        message: `❌ Joueur "${cleanedScannedId}" introuvable dans la base de données` 
+      };
     }
 
     const scannedPlayerData = scannedPlayerDoc.data();
+    console.log('Joueur scanné trouvé:', scannedPlayerData.name);
 
-    // Vérifier si c'est la bonne cible
-    const isCorrectTarget = currentMission.targetId === scannedPlayerId;
+    const isCorrectTarget = currentMission.targetId === cleanedScannedId;
+    console.log('Cible attendue:', currentMission.targetId);
+    console.log('Est-ce la bonne cible?', isCorrectTarget);
 
     if (!isCorrectTarget) {
       return {
@@ -49,16 +65,16 @@ export async function validateMission(
       };
     }
 
-    // C'EST LA BONNE CIBLE !
-    // Déterminer le changement du portail selon le rôle
+    console.log('✅ BONNE CIBLE !');
+    
     const portalChange = playerData.role === 'human' ? -1 : +1;
+    console.log('Changement portail:', portalChange, '(rôle:', playerData.role, ')');
 
-    // Récupérer l'état du jeu actuel
     const gameStateDoc = await getDoc(doc(db, 'game_state', 'current'));
     const gameState = gameStateDoc.data();
     const newPortalLevel = Math.max(0, Math.min(20, (gameState?.portalLevel || 10) + portalChange));
+    console.log('Portail:', gameState?.portalLevel, '→', newPortalLevel);
 
-    // Mettre à jour le niveau du portail
     await updateDoc(doc(db, 'game_state', 'current'), {
       portalLevel: newPortalLevel,
       ...(playerData.role === 'human' 
@@ -66,21 +82,21 @@ export async function validateMission(
         : { alteredSuccesses: (gameState?.alteredSuccesses || 0) + 1 }
       )
     });
+    console.log('✅ État du jeu mis à jour');
 
-    // Marquer la mission comme complétée
     await updateDoc(doc(db, 'missions', currentMission.id), {
       completed: true,
       completedAt: Date.now(),
       result: 'success'
     });
+    console.log('✅ Mission marquée comme complétée');
 
-    // Mettre à jour le joueur
     await updateDoc(doc(db, 'players', currentPlayerId), {
       currentMission: null,
       missionsCompleted: arrayUnion(currentMission.id)
     });
+    console.log('✅ Joueur mis à jour');
 
-    // Créer les événements
     await GameEvents.missionCompleted(playerData.name, currentPlayerId);
     
     if (portalChange > 0) {
@@ -88,12 +104,34 @@ export async function validateMission(
     } else {
       await GameEvents.portalDecreased(newPortalLevel);
     }
+    console.log('✅ Événements créés');
+
+    // ✨ VÉRIFIER LA FIN DE PARTIE
+    console.log('🔍 Vérification fin de partie...');
+    const endCheck = await checkGameEnd();
+    
+    if (endCheck.isEnded && endCheck.winner && endCheck.reason) {
+      console.log('🏁 FIN DE PARTIE DÉTECTÉE !');
+      await triggerGameEnd(endCheck.winner, endCheck.reason);
+      
+      return {
+        success: true,
+        isCorrectTarget: true,
+        missionCompleted: true,
+        portalChange,
+        gameEnded: true,
+        message: `✅ Mission réussie ! ${endCheck.reason}`
+      };
+    }
+
+    console.log('=== FIN VALIDATION ===\n');
 
     return {
       success: true,
       isCorrectTarget: true,
       missionCompleted: true,
       portalChange,
+      gameEnded: false,
       message: `✅ Mission réussie ! Tu as trouvé ${scannedPlayerData.name}. ${
         playerData.role === 'human' 
           ? `Le Portail diminue de ${Math.abs(portalChange)} niveau.`
@@ -102,7 +140,10 @@ export async function validateMission(
     };
 
   } catch (error) {
-    console.error('Erreur validation mission:', error);
-    return { success: false, message: 'Erreur lors de la validation' };
+    console.error('❌ ERREUR validation mission:', error);
+    return { 
+      success: false, 
+      message: `❌ Erreur lors de la validation: ${error}` 
+    };
   }
 }

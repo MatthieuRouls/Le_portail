@@ -11,7 +11,7 @@ export default defineConfig({
       'localhost',
       '.ngrok-free.app',
       '.ngrok.io',
-      '.ngrok.app',
+      '.ngrok.app','.ngrok-free.dev'
     ]
   },
 })
