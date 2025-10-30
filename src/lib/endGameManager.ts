@@ -34,14 +34,22 @@ export async function checkGameEnd(): Promise<{
   reason?: string;
 }> {
   try {
+    console.log('\n🔍 === VÉRIFICATION FIN DE PARTIE ===');
+    
     const gameStateDoc = await getDoc(doc(db, 'game_state', 'current'));
-    if (!gameStateDoc.exists()) return { isEnded: false };
+    if (!gameStateDoc.exists()) {
+      console.log('❌ Game state introuvable');
+      return { isEnded: false };
+    }
     
     const gameState = gameStateDoc.data();
-    const portalLevel = gameState.portalLevel || 10;
+    const portalLevel = gameState.portalLevel ?? 10;
+    
+    console.log('📊 Niveau du portail:', portalLevel);
     
     // Victoire des humains - Portail fermé
     if (portalLevel <= 0) {
+      console.log('🎉 VICTOIRE HUMAINS - Portail fermé !');
       return {
         isEnded: true,
         winner: 'humans',
@@ -51,6 +59,7 @@ export async function checkGameEnd(): Promise<{
     
     // Victoire des altérés - Portail ouvert
     if (portalLevel >= 20) {
+      console.log('👻 VICTOIRE ALTÉRÉS - Portail ouvert !');
       return {
         isEnded: true,
         winner: 'altered',
@@ -67,7 +76,11 @@ export async function checkGameEnd(): Promise<{
     const aliveHumans = alivePlayers.filter(p => p.role === 'human');
     const aliveAltered = alivePlayers.filter(p => p.role === 'altered');
     
+    console.log('👤 Humains vivants:', aliveHumans.length);
+    console.log('👻 Altérés vivants:', aliveAltered.length);
+    
     if (aliveAltered.length === 0 && aliveHumans.length > 0) {
+      console.log('🎉 VICTOIRE HUMAINS - Tous les altérés éliminés !');
       return {
         isEnded: true,
         winner: 'humans',
@@ -76,12 +89,16 @@ export async function checkGameEnd(): Promise<{
     }
     
     if (aliveHumans.length === 0 && aliveAltered.length > 0) {
+      console.log('👻 VICTOIRE ALTÉRÉS - Tous les humains éliminés !');
       return {
         isEnded: true,
         winner: 'altered',
         reason: 'Tous les Humains ont été éliminés ! Les Altérés ont gagné.'
       };
     }
+    
+    console.log('✅ Partie en cours');
+    console.log('=== FIN VÉRIFICATION ===\n');
     
     return { isEnded: false };
     
@@ -93,35 +110,43 @@ export async function checkGameEnd(): Promise<{
 
 export async function triggerGameEnd(winner: 'humans' | 'altered', reason: string): Promise<EndGameStats | null> {
   try {
-    console.log('🏁 FIN DE PARTIE -', winner, 'gagnent !');
+    console.log('\n🏁 === DÉCLENCHEMENT FIN DE PARTIE ===');
+    console.log('🏆 Vainqueur:', winner);
+    console.log('📝 Raison:', reason);
     
-    // Mettre à jour le game state
     const gameStateDoc = await getDoc(doc(db, 'game_state', 'current'));
     const gameState = gameStateDoc.data();
     
+    console.log('💾 Mise à jour game_state...');
     await updateDoc(doc(db, 'game_state', 'current'), {
       status: 'ended',
       winner: winner,
       endReason: reason,
       endedAt: Date.now()
     });
+    console.log('✅ Game state mis à jour');
     
-    // Créer l'événement de victoire
+    console.log('📢 Création événement de victoire...');
     if (winner === 'humans') {
       await GameEvents.humanVictory();
     } else {
       await GameEvents.alteredVictory();
     }
+    console.log('✅ Événement créé');
     
-    // Collecter les stats
+    console.log('📊 Génération des statistiques...');
     const stats = await generateEndGameStats(winner, reason, gameState);
+    console.log('✅ Stats générées');
     
-    // Sauvegarder les stats
+    console.log('💾 Sauvegarde des stats...');
+    // Convertir en objet simple pour Firebase (supprimer les undefined)
+    const statsToSave = JSON.parse(JSON.stringify(stats));
     await updateDoc(doc(db, 'game_state', 'current'), {
-      endGameStats: stats
+      endGameStats: statsToSave
     });
+    console.log('✅ Stats sauvegardées');
     
-    console.log('✅ Statistiques de fin sauvegardées');
+    console.log('=== FIN DÉCLENCHEMENT ===\n');
     
     return stats;
     
@@ -139,15 +164,16 @@ async function generateEndGameStats(
   const playersSnapshot = await getDocs(collection(db, 'players'));
   const playersData = playersSnapshot.docs.map(doc => doc.data());
   
-  // Stats des joueurs
+  // Stats des joueurs - S'assurer qu'il n'y a pas de undefined
   const playersStats: PlayerStats[] = playersData.map(player => ({
-    id: player.id,
-    name: player.name,
-    role: player.role,
+    id: player.id || '',
+    name: player.name || 'Inconnu',
+    role: player.role || 'human',
     missionsCompleted: player.missionsCompleted?.length || 0,
     isEliminated: player.isEliminated || false,
-    eliminatedAt: player.eliminatedAt,
-    suspicions: player.suspicions || []
+    eliminatedAt: player.eliminatedAt || 0,
+    suspicions: player.suspicions || [],
+    votesReceived: 0
   }));
   
   // Calculer les votes reçus
@@ -156,9 +182,11 @@ async function generateEndGameStats(
   
   votingSessionsSnapshot.docs.forEach(doc => {
     const session = doc.data();
-    Object.values(session.votes).forEach((targetId: any) => {
-      voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
-    });
+    if (session.votes) {
+      Object.values(session.votes).forEach((targetId: any) => {
+        voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
+      });
+    }
   });
   
   playersStats.forEach(player => {
@@ -169,21 +197,28 @@ async function generateEndGameStats(
   const mvp = calculateMVP(playersStats, winner);
   
   // Durée de la partie
-  const duration = Date.now() - (gameState.startedAt || Date.now());
+  const startedAt = gameState?.startedAt || Date.now();
+  const duration = Date.now() - startedAt;
   
   // Total missions complétées
   const totalMissionsCompleted = playersStats.reduce((sum, p) => sum + p.missionsCompleted, 0);
   
-  return {
+  const stats: EndGameStats = {
     winner,
     endReason: endReason as any,
-    finalPortalLevel: gameState.portalLevel || 10,
+    finalPortalLevel: gameState?.portalLevel ?? 10,
     totalMissionsCompleted,
     playersStats,
-    mvp,
     duration,
     endedAt: Date.now()
   };
+  
+  // Ajouter MVP seulement s'il existe
+  if (mvp) {
+    stats.mvp = mvp;
+  }
+  
+  return stats;
 }
 
 function calculateMVP(playersStats: PlayerStats[], winner: 'humans' | 'altered'): {

@@ -1,367 +1,703 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useGameState } from '../hooks/useGameState';
+import { useAllPlayers } from '../hooks/useAllPlayers';
+import { useGameEvents } from '../hooks/useGameEvents';
+import { resetGame, setPortalLevel } from '../lib/gameManager';
+import { createMission } from '../lib/missionGenerator';
+import { createPlayer, deletePlayer } from '../lib/playerManager';
+import { GameEvents } from '../lib/gameEvents';
+import MissionQueueCreator from '../components/admin/MissionQueueCreator';
+import PrintAllQRCodes from '../components/admin/PrintAllQRCodes';
+import PlayerConnectionQR from '../components/admin/PlayerConnectionQR';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
+import StaticNoise from '../components/effects/StaticNoise';
+import FlickeringLights from '../components/effects/FlickeringLights';
 import GlitchText from '../components/effects/GlitchText';
-import EventTester from '../components/admin/EventTester';
-import { generateAllQRCodes, downloadQRCode, downloadAllQRCodes } from '../lib/generateQRCodes';
-import { diagnoseGame, repairGame } from '../lib/repairGame';
-import { resetAndReassignMissions } from '../lib/resetGame';
-
-interface QRCodeData {
-  playerId: string;
-  playerName: string;
-  qrCode: string;
-  dataUrl: string;
-}
+import PortalGauge from '../components/ui/PortalGauge';
 
 interface AdminDashboardProps {
-  onNavigate: (page: 'home' | 'login' | 'player' | 'admin') => void;
+  onNavigate: (page: 'home' | 'admin') => void;
 }
 
 export default function AdminDashboard({ onNavigate }: AdminDashboardProps) {
-  const [qrCodes, setQrCodes] = useState<QRCodeData[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [generated, setGenerated] = useState(false);
-  const [diagnostic, setDiagnostic] = useState<string>('');
-  const [repairing, setRepairing] = useState(false);
+  const { gameState, loading: gameLoading } = useGameState();
+  const { players, loading: playersLoading } = useAllPlayers();
+  const { events, loading: eventsLoading } = useGameEvents(10);
+  
   const [resetting, setResetting] = useState(false);
-
-  const handleGenerate = async () => {
-    setLoading(true);
-    const codes = await generateAllQRCodes();
-    setQrCodes(codes);
-    setGenerated(true);
-    setLoading(false);
-  };
-
-  const handleDownloadAll = async () => {
-    await downloadAllQRCodes(qrCodes);
-    alert('✅ Tous les QR codes ont été téléchargés !');
-  };
-
-  const handleDiagnose = async () => {
-    setDiagnostic('🔍 Diagnostic en cours...');
-    console.clear();
-    const result = await diagnoseGame();
-    setDiagnostic(`✅ Game State: ${result.hasGameState ? 'OK' : '❌ Manquant'}
-👥 Joueurs: ${result.totalPlayers}
-✅ Avec mission: ${result.playersWithMissions}
-⚠️  Sans mission: ${result.playersWithoutMissions}
-📋 Missions créées: ${result.totalMissions}`);
-  };
-
-  const handleRepair = async () => {
-    if (!confirm('Assigner les missions Tier 1 à tous les joueurs ?')) return;
-    
-    setRepairing(true);
-    console.clear();
-    await repairGame();
-    await handleDiagnose();
-    setRepairing(false);
-    alert('✅ Réparation terminée ! Vérifie la console et rafraîchis le PlayerDashboard.');
-  };
+  const [testMessage, setTestMessage] = useState('');
+  const [portalInput, setPortalInput] = useState('10');
+  
+  const [newPlayerId, setNewPlayerId] = useState('');
+  const [newPlayerName, setNewPlayerName] = useState('');
+  const [newPlayerRole, setNewPlayerRole] = useState<'human' | 'altered'>('human');
+  const [creatingPlayer, setCreatingPlayer] = useState(false);
+  
+  const [showPrintQRCodes, setShowPrintQRCodes] = useState(false);
+  const [selectedPlayerQR, setSelectedPlayerQR] = useState<{ id: string; name: string } | null>(null);
 
   const handleReset = async () => {
-    const confirmed = confirm('⚠️ ATTENTION ⚠️\n\nCette action va:\n• Remettre le portail à 10\n• Supprimer TOUS les événements\n• Réinitialiser TOUS les joueurs\n• Réinitialiser TOUTES les missions\n• Réassigner les missions Tier 1\n\nContinuer ?');
+    const confirmed = confirm(
+      '⚠️ RÉINITIALISER LE JEU ?\n\n' +
+      'Cela va :\n' +
+      '- Remettre le portail à 10\n' +
+      '- Supprimer toutes les missions\n' +
+      '- Réinitialiser tous les joueurs\n' +
+      '- Supprimer tous les événements\n' +
+      '- Annuler toutes les sessions de vote\n\n' +
+      'Continuer ?'
+    );
     
     if (!confirmed) return;
     
-    const doubleConfirm = confirm('Es-tu VRAIMENT sûr ? Cette action est irréversible !');
-    if (!doubleConfirm) return;
-    
     setResetting(true);
-    console.clear();
-    console.log('🔴 RÉINITIALISATION COMPLÈTE EN COURS...\n');
-    
-    const success = await resetAndReassignMissions();
-    
-    if (success) {
-      await handleDiagnose();
-      alert('🎉 Jeu réinitialisé avec succès !\n\nLe jeu est prêt pour une nouvelle partie.\nTous les joueurs ont leur mission Tier 1.\nLe portail est à 10/20.');
-    } else {
-      alert('❌ Erreur lors de la réinitialisation. Vérifie la console.');
+    try {
+      await resetGame();
+      setTestMessage('✅ Jeu réinitialisé avec succès !');
+      setTimeout(() => setTestMessage(''), 3000);
+    } catch (error) {
+      setTestMessage(`❌ Erreur : ${error}`);
+      setTimeout(() => setTestMessage(''), 5000);
+    } finally {
+      setResetting(false);
     }
-    
-    setResetting(false);
   };
 
+  const handleSetPortal = async () => {
+    const level = parseInt(portalInput);
+    if (isNaN(level) || level < 0 || level > 20) {
+      setTestMessage('❌ Niveau invalide (0-20)');
+      setTimeout(() => setTestMessage(''), 3000);
+      return;
+    }
+    
+    try {
+      await setPortalLevel(level);
+      setTestMessage(`✅ Portail réglé à ${level}`);
+      setTimeout(() => setTestMessage(''), 3000);
+    } catch (error) {
+      setTestMessage(`❌ Erreur : ${error}`);
+      setTimeout(() => setTestMessage(''), 5000);
+    }
+  };
+
+  const handleTestMission = async () => {
+    if (players.length < 2) {
+      setTestMessage('❌ Il faut au moins 2 joueurs');
+      setTimeout(() => setTestMessage(''), 3000);
+      return;
+    }
+    
+    try {
+      const randomPlayer = players[Math.floor(Math.random() * players.length)];
+      await createMission(randomPlayer.id, 1);
+      setTestMessage(`✅ Mission créée pour ${randomPlayer.name}`);
+      setTimeout(() => setTestMessage(''), 3000);
+    } catch (error) {
+      setTestMessage(`❌ Erreur : ${error}`);
+      setTimeout(() => setTestMessage(''), 5000);
+    }
+  };
+
+  const handleTestEvent = async (type: string) => {
+    try {
+      switch (type) {
+        case 'mission':
+          await GameEvents.missionCompleted('Test Player', 'test_id');
+          break;
+        case 'portal_up':
+          await GameEvents.portalIncreased(gameState?.portalLevel || 10);
+          break;
+        case 'portal_down':
+          await GameEvents.portalDecreased(gameState?.portalLevel || 10);
+          break;
+        case 'eliminated':
+          await GameEvents.playerEliminated('Test Player');
+          break;
+        case 'vote':
+          await GameEvents.votingStarted('Test Player');
+          break;
+        case 'human_victory':
+          await GameEvents.humanVictory();
+          break;
+        case 'altered_victory':
+          await GameEvents.alteredVictory();
+          break;
+      }
+      setTestMessage(`✅ Événement "${type}" créé`);
+      setTimeout(() => setTestMessage(''), 3000);
+    } catch (error) {
+      setTestMessage(`❌ Erreur : ${error}`);
+      setTimeout(() => setTestMessage(''), 5000);
+    }
+  };
+
+  const handleCreatePlayer = async () => {
+    if (!newPlayerId.trim() || !newPlayerName.trim()) {
+      setTestMessage('❌ ID et nom requis');
+      setTimeout(() => setTestMessage(''), 3000);
+      return;
+    }
+    
+    setCreatingPlayer(true);
+    const result = await createPlayer(
+      newPlayerId.trim().toLowerCase(),
+      newPlayerName.trim(),
+      newPlayerRole
+    );
+    
+    setTestMessage(result.message);
+    setTimeout(() => setTestMessage(''), 3000);
+    
+    if (result.success) {
+      setNewPlayerId('');
+      setNewPlayerName('');
+      setNewPlayerRole('human');
+    }
+    
+    setCreatingPlayer(false);
+  };
+
+  const handleDeletePlayer = async (playerId: string, playerName: string) => {
+    const confirmed = confirm(`⚠️ Supprimer ${playerName} ?`);
+    if (!confirmed) return;
+    
+    const result = await deletePlayer(playerId);
+    setTestMessage(result.message);
+    setTimeout(() => setTestMessage(''), 3000);
+  };
+
+  if (gameLoading || playersLoading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: '#000000',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#d1d5db'
+      }}>
+        ⏳ Chargement...
+      </div>
+    );
+  }
+
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      backgroundColor: '#000000', 
-      padding: '2rem',
-      position: 'relative'
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#000000',
+      padding: '1rem',
+      position: 'relative',
+      overflow: 'hidden'
     }}>
-      <div style={{ maxWidth: '80rem', margin: '0 auto' }}>
+      <StaticNoise />
+      <FlickeringLights />
+      
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        background: 'radial-gradient(ellipse at center, rgba(127, 29, 29, 0.15) 0%, #000000 70%)'
+      }} />
+      
+      <div style={{
+        maxWidth: '1400px',
+        margin: '0 auto',
+        padding: '1.5rem 0',
+        position: 'relative',
+        zIndex: 10
+      }}>
         {/* Header */}
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
-          marginBottom: '2rem' 
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '2rem',
+          flexWrap: 'wrap',
+          gap: '1rem'
         }}>
-          <button
+          <motion.button
             onClick={() => onNavigate('home')}
+            whileHover={{ x: -5 }}
             style={{
               color: '#dc2626',
               fontFamily: 'monospace',
               background: 'none',
               border: 'none',
               cursor: 'pointer',
-              fontSize: '1rem'
+              fontSize: '0.875rem'
             }}
           >
             ← RETOUR
-          </button>
-          <GlitchText>
-            <h1 style={{ 
-              fontSize: '2.5rem', 
-              color: '#dc2626', 
-              fontWeight: 'bold',
-              margin: 0
-            }}>
-              🎮 ADMIN - DASHBOARD
-            </h1>
+          </motion.button>
+          
+          <GlitchText style={{ color: '#dc2626', fontSize: '2rem', fontWeight: 'bold' }}>
+            <h1>👑 ADMIN</h1>
           </GlitchText>
+          
           <div style={{ width: '100px' }} />
         </div>
 
-        {/* RESET COMPLET - ZONE DANGER */}
-        <Card style={{ 
-          marginBottom: '2rem',
-          border: '2px solid #dc2626',
-          backgroundColor: 'rgba(127, 29, 29, 0.2)'
-        }}>
-          <h2 style={{
-            color: '#dc2626',
-            fontSize: '1.5rem',
-            fontWeight: 'bold',
-            marginBottom: '1rem',
-            fontFamily: 'monospace',
-            textAlign: 'center'
-          }}>
-            🔴 ZONE DANGER - RESET COMPLET
-          </h2>
-
-          <div style={{
-            backgroundColor: 'rgba(220, 38, 38, 0.2)',
-            border: '1px solid rgba(220, 38, 38, 0.5)',
-            borderRadius: '0.5rem',
-            padding: '1rem',
-            marginBottom: '1rem',
-            fontFamily: 'monospace',
-            fontSize: '0.875rem',
-            color: '#fca5a5'
-          }}>
-            ⚠️ Cette action va TOUT remettre à zéro :<br/>
-            • Portail remis à 10/20<br/>
-            • Tous les événements supprimés<br/>
-            • Tous les joueurs réinitialisés<br/>
-            • Toutes les missions réinitialisées<br/>
-            • Missions Tier 1 réassignées
-          </div>
-
-          <Button 
-            onClick={handleReset} 
-            variant="danger" 
-            isLoading={resetting}
+        {testMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
             style={{
-              backgroundColor: '#991b1b',
-              borderColor: '#dc2626'
+              marginBottom: '2rem',
+              padding: '1rem',
+              backgroundColor: testMessage.includes('✅')
+                ? 'rgba(16, 185, 129, 0.2)'
+                : 'rgba(239, 68, 68, 0.2)',
+              border: testMessage.includes('✅')
+                ? '1px solid rgba(16, 185, 129, 0.5)'
+                : '1px solid rgba(239, 68, 68, 0.5)',
+              borderRadius: '0.5rem',
+              textAlign: 'center',
+              color: testMessage.includes('✅') ? '#10b981' : '#ef4444',
+              fontFamily: 'monospace'
             }}
           >
-            🔄 RESET COMPLET DU JEU
-          </Button>
+            {testMessage}
+          </motion.div>
+        )}
 
-          <p style={{
-            color: '#6b7280',
-            fontSize: '0.75rem',
-            textAlign: 'center',
-            marginTop: '1rem',
-            fontFamily: 'monospace'
-          }}>
-            À utiliser avant le jour J ou pour recommencer les tests
-          </p>
-        </Card>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 350px), 1fr))',
+          gap: '1.5rem'
+        }}>
+          {/* Portail */}
+          <div style={{ gridColumn: '1 / -1' }}>
+            <Card>
+              <PortalGauge
+                level={gameState?.portalLevel || 0}
+                maxLevel={gameState?.maxLevel || 20}
+              />
+            </Card>
+          </div>
 
-        {/* Diagnostic et Réparation */}
-        <Card glow style={{ marginBottom: '2rem' }}>
-          <h2 style={{
-            color: '#dc2626',
-            fontSize: '1.5rem',
-            fontWeight: 'bold',
-            marginBottom: '1rem',
-            fontFamily: 'monospace',
-            textAlign: 'center'
-          }}>
-            🔧 DIAGNOSTIC & RÉPARATION
-          </h2>
-
-          {diagnostic && (
-            <div style={{
-              backgroundColor: 'rgba(16, 185, 129, 0.2)',
-              border: '1px solid rgba(16, 185, 129, 0.5)',
-              borderRadius: '0.5rem',
-              padding: '1rem',
+          {/* Créer un joueur */}
+          <Card style={{ gridColumn: '1 / -1' }}>
+            <h3 style={{
+              fontSize: '1rem',
+              fontWeight: 'bold',
+              color: '#e5e7eb',
               marginBottom: '1rem',
-              fontFamily: 'monospace',
-              fontSize: '0.875rem',
-              color: '#10b981',
-              whiteSpace: 'pre-line'
-            }}>
-              {diagnostic}
-            </div>
-          )}
-
-          <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: '1fr 1fr' }}>
-            <Button onClick={handleDiagnose} variant="secondary">
-              🔍 DIAGNOSTIQUER
-            </Button>
-            <Button onClick={handleRepair} variant="primary" isLoading={repairing}>
-              🔧 RÉPARER
-            </Button>
-          </div>
-
-          <p style={{
-            color: '#6b7280',
-            fontSize: '0.75rem',
-            textAlign: 'center',
-            marginTop: '1rem',
-            fontFamily: 'monospace'
-          }}>
-            Le diagnostic vérifie l'état du jeu. La réparation assigne les missions Tier 1.
-          </p>
-        </Card>
-
-        {/* Testeur d'événements */}
-        <EventTester />
-
-        {/* Actions QR Codes */}
-        <Card glow style={{ marginBottom: '2rem' }}>
-          <h2 style={{
-            color: '#dc2626',
-            fontSize: '1.5rem',
-            fontWeight: 'bold',
-            marginBottom: '1rem',
-            fontFamily: 'monospace',
-            textAlign: 'center'
-          }}>
-            📱 QR CODES
-          </h2>
-
-          <div style={{ 
-            display: 'flex', 
-            gap: '1rem', 
-            flexWrap: 'wrap',
-            justifyContent: 'center'
-          }}>
-            <Button
-              onClick={handleGenerate}
-              isLoading={loading}
-              disabled={generated}
-            >
-              📱 GÉNÉRER LES QR CODES
-            </Button>
-            
-            {generated && (
-              <Button
-                onClick={handleDownloadAll}
-                variant="secondary"
-              >
-                💾 TÉLÉCHARGER TOUS LES QR CODES
-              </Button>
-            )}
-          </div>
-          
-          {generated && (
-            <p style={{ 
-              textAlign: 'center', 
-              marginTop: '1rem', 
-              color: '#10b981',
               fontFamily: 'monospace'
             }}>
-              ✅ {qrCodes.length} QR codes générés
-            </p>
-          )}
-        </Card>
-
-        {/* Grid des QR codes */}
-        {generated && (
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
-            gap: '1.5rem'
-          }}>
-            {qrCodes.map((qr, index) => (
-              <motion.div
-                key={qr.playerId}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
+              ➕ CRÉER UN JOUEUR
+            </h3>
+            
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '0.75rem',
+              marginBottom: '1rem'
+            }}>
+              <input
+                type="text"
+                placeholder="ID (ex: diana)"
+                value={newPlayerId}
+                onChange={(e) => setNewPlayerId(e.target.value)}
+                style={{
+                  padding: '0.75rem',
+                  backgroundColor: '#111827',
+                  border: '1px solid #374151',
+                  borderRadius: '0.375rem',
+                  color: '#d1d5db',
+                  fontFamily: 'monospace'
+                }}
+              />
+              <input
+                type="text"
+                placeholder="Nom (ex: Diana)"
+                value={newPlayerName}
+                onChange={(e) => setNewPlayerName(e.target.value)}
+                style={{
+                  padding: '0.75rem',
+                  backgroundColor: '#111827',
+                  border: '1px solid #374151',
+                  borderRadius: '0.375rem',
+                  color: '#d1d5db',
+                  fontFamily: 'monospace'
+                }}
+              />
+              <select
+                value={newPlayerRole}
+                onChange={(e) => setNewPlayerRole(e.target.value as 'human' | 'altered')}
+                style={{
+                  padding: '0.75rem',
+                  backgroundColor: '#111827',
+                  border: '1px solid #374151',
+                  borderRadius: '0.375rem',
+                  color: '#d1d5db',
+                  fontFamily: 'monospace'
+                }}
               >
-                <Card>
-                  <div style={{ textAlign: 'center' }}>
-                    <h3 style={{ 
-                      color: '#dc2626', 
-                      fontFamily: 'monospace',
-                      marginBottom: '1rem',
-                      fontSize: '1.25rem',
-                      fontWeight: 'bold'
-                    }}>
-                      {qr.playerName}
-                    </h3>
-                    
-                    <div style={{ 
-                      backgroundColor: '#000000',
-                      padding: '1rem',
-                      borderRadius: '0.5rem',
-                      marginBottom: '1rem'
-                    }}>
-                      <img 
-                        src={qr.dataUrl} 
-                        alt={`QR ${qr.playerName}`}
-                        style={{ 
-                          width: '100%', 
-                          height: 'auto',
-                          imageRendering: 'pixelated'
-                        }}
-                      />
-                    </div>
+                <option value="human">👤 Humain</option>
+                <option value="altered">👻 Altéré</option>
+              </select>
+            </div>
+            
+            <Button
+              onClick={handleCreatePlayer}
+              variant="primary"
+              disabled={creatingPlayer}
+            >
+              {creatingPlayer ? '⏳ CRÉATION...' : '➕ CRÉER LE JOUEUR'}
+            </Button>
+          </Card>
 
+          {/* Créer une queue de 3 missions */}
+          <div style={{ gridColumn: '1 / -1' }}>
+            <MissionQueueCreator
+              players={players}
+              onSuccess={(msg) => {
+                setTestMessage(msg);
+                setTimeout(() => setTestMessage(''), 3000);
+              }}
+              onError={(msg) => {
+                setTestMessage(msg);
+                setTimeout(() => setTestMessage(''), 3000);
+              }}
+            />
+          </div>
+
+          {/* Contrôle du portail */}
+          <Card>
+            <h3 style={{
+              fontSize: '1rem',
+              fontWeight: 'bold',
+              color: '#e5e7eb',
+              marginBottom: '1rem',
+              fontFamily: 'monospace'
+            }}>
+              🎚️ CONTRÔLE DU PORTAIL
+            </h3>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+              <input
+                type="number"
+                min="0"
+                max="20"
+                value={portalInput}
+                onChange={(e) => setPortalInput(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '0.5rem',
+                  backgroundColor: '#111827',
+                  border: '1px solid #374151',
+                  borderRadius: '0.375rem',
+                  color: '#d1d5db',
+                  fontFamily: 'monospace'
+                }}
+              />
+              <Button onClick={handleSetPortal} variant="primary">
+                DÉFINIR
+              </Button>
+            </div>
+          </Card>
+
+          {/* Reset */}
+          <Card>
+            <h3 style={{
+              fontSize: '1rem',
+              fontWeight: 'bold',
+              color: '#e5e7eb',
+              marginBottom: '1rem',
+              fontFamily: 'monospace'
+            }}>
+              🔄 RÉINITIALISATION
+            </h3>
+            <Button
+              onClick={handleReset}
+              variant="primary"
+              disabled={resetting}
+            >
+              {resetting ? '⏳ EN COURS...' : '🔄 RESET COMPLET'}
+            </Button>
+          </Card>
+
+          {/* QR Codes d'identité */}
+          <Card>
+            <h3 style={{
+              fontSize: '1rem',
+              fontWeight: 'bold',
+              color: '#e5e7eb',
+              marginBottom: '1rem',
+              fontFamily: 'monospace'
+            }}>
+              📱 QR CODES D'IDENTITÉ
+            </h3>
+            <p style={{
+              fontSize: '0.75rem',
+              color: '#9ca3af',
+              fontFamily: 'monospace',
+              marginBottom: '1rem',
+              lineHeight: '1.5'
+            }}>
+              Pour scanner et identifier les joueurs lors des missions et votes
+            </p>
+            <Button onClick={() => setShowPrintQRCodes(true)} variant="secondary">
+              📱 VOIR & IMPRIMER
+            </Button>
+          </Card>
+
+          {/* Test de mission */}
+          <Card>
+            <h3 style={{
+              fontSize: '1rem',
+              fontWeight: 'bold',
+              color: '#e5e7eb',
+              marginBottom: '1rem',
+              fontFamily: 'monospace'
+            }}>
+              🎯 TEST MISSION ALÉATOIRE
+            </h3>
+            <Button onClick={handleTestMission} variant="secondary">
+              CRÉER MISSION TEST
+            </Button>
+          </Card>
+
+          {/* Test événements */}
+          <Card style={{ gridColumn: '1 / -1' }}>
+            <h3 style={{
+              fontSize: '1rem',
+              fontWeight: 'bold',
+              color: '#e5e7eb',
+              marginBottom: '1rem',
+              fontFamily: 'monospace'
+            }}>
+              📢 TEST ÉVÉNEMENTS
+            </h3>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+              gap: '0.75rem'
+            }}>
+              <Button onClick={() => handleTestEvent('mission')} variant="secondary">
+                Mission complétée
+              </Button>
+              <Button onClick={() => handleTestEvent('portal_up')} variant="secondary">
+                Portail +1
+              </Button>
+              <Button onClick={() => handleTestEvent('portal_down')} variant="secondary">
+                Portail -1
+              </Button>
+              <Button onClick={() => handleTestEvent('eliminated')} variant="secondary">
+                Joueur éliminé
+              </Button>
+              <Button onClick={() => handleTestEvent('vote')} variant="secondary">
+                Vote lancé
+              </Button>
+              <Button onClick={() => handleTestEvent('human_victory')} variant="secondary">
+                Victoire humains
+              </Button>
+              <Button onClick={() => handleTestEvent('altered_victory')} variant="secondary">
+                Victoire altérés
+              </Button>
+            </div>
+          </Card>
+
+          {/* Liste des joueurs */}
+          <Card style={{ gridColumn: '1 / -1' }}>
+            <h3 style={{
+              fontSize: '1rem',
+              fontWeight: 'bold',
+              color: '#e5e7eb',
+              marginBottom: '1rem',
+              fontFamily: 'monospace'
+            }}>
+              👥 JOUEURS ({players.length})
+            </h3>
+            {players.length > 0 ? (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gap: '0.75rem'
+              }}>
+                {players.map((player) => (
+                  <div
+                    key={player.id}
+                    style={{
+                      padding: '1rem',
+                      backgroundColor: 'rgba(127, 29, 29, 0.2)',
+                      border: '1px solid rgba(220, 38, 38, 0.3)',
+                      borderRadius: '0.5rem',
+                      opacity: player.isEliminated ? 0.5 : 1,
+                      position: 'relative'
+                    }}
+                  >
                     <button
-                      onClick={() => downloadQRCode(qr.dataUrl, qr.playerName)}
+                      onClick={() => handleDeletePlayer(player.id, player.name)}
                       style={{
-                        backgroundColor: '#7c3aed',
-                        color: '#ffffff',
-                        padding: '0.5rem 1rem',
-                        borderRadius: '0.375rem',
-                        border: '2px solid #6d28d9',
-                        fontSize: '0.875rem',
-                        fontWeight: 'bold',
+                        position: 'absolute',
+                        top: '0.5rem',
+                        right: '0.5rem',
+                        background: 'rgba(220, 38, 38, 0.5)',
+                        border: 'none',
+                        borderRadius: '0.25rem',
+                        color: '#fff',
                         cursor: 'pointer',
-                        fontFamily: 'monospace',
-                        width: '100%'
+                        padding: '0.25rem 0.5rem',
+                        fontSize: '0.75rem',
+                        fontFamily: 'monospace'
                       }}
                     >
-                      💾 TÉLÉCHARGER
+                      ✕
                     </button>
-
-                    <p style={{ 
-                      fontSize: '0.75rem', 
-                      color: '#6b7280',
-                      marginTop: '0.5rem',
-                      fontFamily: 'monospace'
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      marginBottom: '0.75rem'
                     }}>
-                      ID: {qr.playerId}
-                    </p>
+                      <span style={{ fontSize: '1.5rem' }}>
+                        {player.role === 'human' ? '👤' : '👻'}
+                      </span>
+                      <div>
+                        <div style={{
+                          color: '#e5e7eb',
+                          fontFamily: 'monospace',
+                          fontWeight: 'bold'
+                        }}>
+                          {player.name}
+                          {player.isEliminated && ' ☠️'}
+                        </div>
+                        <div style={{
+                          fontSize: '0.75rem',
+                          color: player.role === 'human' ? '#10b981' : '#dc2626',
+                          fontFamily: 'monospace'
+                        }}>
+                          {player.role === 'human' ? 'HUMAIN' : 'ALTÉRÉ'}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{
+                      fontSize: '0.75rem',
+                      color: '#9ca3af',
+                      fontFamily: 'monospace',
+                      marginBottom: '0.75rem'
+                    }}>
+                      {player.missionsCompleted?.length || 0} missions • 
+                      {player.currentMission ? ' 🎯 Mission active' : ' ⏸️ Pas de mission'}
+                      {player.missionQueue && player.missionQueue.length > 0 && (
+                        <span style={{ color: '#fbbf24' }}> (+{player.missionQueue.length} en attente)</span>
+                      )}
+                    </div>
+                    
+                    {/* Bouton QR Code de connexion */}
+                    <button
+                      onClick={() => setSelectedPlayerQR({ id: player.id, name: player.name })}
+                      style={{
+                        width: '100%',
+                        padding: '0.625rem',
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        border: '1px solid rgba(59, 130, 246, 0.5)',
+                        borderRadius: '0.375rem',
+                        color: '#60a5fa',
+                        fontFamily: 'monospace',
+                        fontSize: '0.75rem',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.3)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.2)';
+                      }}
+                    >
+                      🔐 QR CONNEXION
+                    </button>
                   </div>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
-        )}
+                ))}
+              </div>
+            ) : (
+              <div style={{
+                textAlign: 'center',
+                color: '#6b7280',
+                fontFamily: 'monospace',
+                padding: '2rem'
+              }}>
+                Aucun joueur
+              </div>
+            )}
+          </Card>
+
+          {/* Événements */}
+          <Card style={{ gridColumn: '1 / -1' }}>
+            <h3 style={{
+              fontSize: '1rem',
+              fontWeight: 'bold',
+              color: '#e5e7eb',
+              marginBottom: '1rem',
+              fontFamily: 'monospace'
+            }}>
+              📜 ÉVÉNEMENTS RÉCENTS
+            </h3>
+            {eventsLoading ? (
+              <div style={{
+                textAlign: 'center',
+                color: '#6b7280',
+                fontFamily: 'monospace',
+                padding: '1rem'
+              }}>
+                Chargement...
+              </div>
+            ) : events.length > 0 ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.5rem'
+              }}>
+                {events.map((event) => (
+                  <div
+                    key={event.id}
+                    style={{
+                      padding: '0.75rem',
+                      backgroundColor: 'rgba(17, 24, 39, 0.5)',
+                      borderRadius: '0.375rem',
+                      color: '#9ca3af',
+                      fontFamily: 'monospace',
+                      fontSize: '0.875rem'
+                    }}
+                  >
+                    <span style={{ color: '#dc2626' }}>•</span> {event.message}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{
+                textAlign: 'center',
+                color: '#6b7280',
+                fontFamily: 'monospace',
+                padding: '2rem'
+              }}>
+                Aucun événement
+              </div>
+            )}
+          </Card>
+        </div>
       </div>
+
+      {/* Modal Print QR Codes d'identité */}
+      {showPrintQRCodes && (
+        <PrintAllQRCodes
+          players={players}
+          onClose={() => setShowPrintQRCodes(false)}
+        />
+      )}
+
+      {/* Modal QR Code de connexion */}
+      {selectedPlayerQR && (
+        <PlayerConnectionQR
+          playerId={selectedPlayerQR.id}
+          playerName={selectedPlayerQR.name}
+          onClose={() => setSelectedPlayerQR(null)}
+        />
+      )}
     </div>
   );
 }
